@@ -52,6 +52,12 @@ function emitStopWarn(agent, reason) {
     process.stdout.write(reason + '\n'); // Kimi:stdout 会被注入上下文
     process.exit(0);
   }
+  if (agent === 'codex') {
+    // Codex 的 Stop 事件不支持 hookSpecificOutput.additionalContext,
+    // warn 走 Common output fields 的 systemMessage(展示给用户)
+    process.stdout.write(JSON.stringify({ systemMessage: reason }) + '\n');
+    process.exit(0);
+  }
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: { hookEventName: 'Stop', additionalContext: reason },
   }) + '\n');

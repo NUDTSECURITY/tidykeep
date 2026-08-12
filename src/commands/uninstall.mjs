@@ -1,6 +1,8 @@
 // `tidykeep uninstall` —— 按 manifest 精确回滚:只剥标记块与我们的 hook 条目,
 // 文件仅当"本工具创建且剥空"才删除;STATE/LEDGER 默认保留(--purge 才删)。
-import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from 'node:fs';
+import {
+  existsSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync, rmdirSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { stripBlockFile } from '../lib/markers.mjs';
@@ -24,12 +26,17 @@ export function uninstall(targetArg, opts = {}) {
   const scratch = cfg.SCRATCH_DIR ?? '.tmp';
   log(`从 ${target} 卸载`);
 
+  const problems = []; // 需要用户手工处理的项(决定是否保留备份)
+
   // 1. 标记块(GEMINI.md 是旧 bash 版可能留下的,顺带收拾)
   const mdTargets = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md'];
   const hashTargets = ['.gitignore', '.gitattributes'];
   for (const rel of mdTargets) {
     const st = stripBlockFile(join(target, rel), MD_BEGIN, MD_END);
-    if (st === 'empty' && wasCreated(manifest, rel)) {
+    if (st === 'unpaired') {
+      log(`警告: ${rel} 中 tidykeep 标记不成对(可能被误删或 merge 冲突),为避免误删你的内容,该文件未改动;请手工移除标记块`);
+      problems.push(rel);
+    } else if (st === 'empty' && wasCreated(manifest, rel)) {
       unlinkSync(join(target, rel));
       log(`已删除 ${rel}(本工具创建且已无其他内容)`);
     } else if (st !== 'missing') {
@@ -38,7 +45,12 @@ export function uninstall(targetArg, opts = {}) {
   }
   for (const rel of hashTargets) {
     const st = stripBlockFile(join(target, rel), HASH_BEGIN, HASH_END);
-    if (st === 'empty' && wasCreated(manifest, rel)) unlinkSync(join(target, rel));
+    if (st === 'unpaired') {
+      log(`警告: ${rel} 中 tidykeep 标记不成对,该文件未改动;请手工移除标记块`);
+      problems.push(rel);
+    } else if (st === 'empty' && wasCreated(manifest, rel)) {
+      unlinkSync(join(target, rel));
+    }
   }
 
   // 2. hooks JSON(Claude / Codex 同一套剥离)
@@ -47,7 +59,8 @@ export function uninstall(targetArg, opts = {}) {
     if (!existsSync(path)) continue;
     const r = stripSettingsText(readFileSync(path, 'utf8'));
     if (r.status === 'skipped') {
-      log(`警告: ${rel} 无法解析,未改动(原始备份见 .tidykeep/backup/)`);
+      log(`警告: ${rel} 无法解析,未改动;其中的 tidykeep hooks 条目请手工移除`);
+      problems.push(rel);
     } else if (r.status === 'empty' && wasCreated(manifest, rel)) {
       unlinkSync(path);
       log(`已删除 ${rel}(本工具创建且已无其他内容)`);
@@ -96,6 +109,14 @@ export function uninstall(targetArg, opts = {}) {
     log(`已保留 STATE.md / LEDGER.md / ${scratch}/(项目知识;--purge 可移除)`);
   }
 
+  // 有未能自动清理的文件时,把原始备份搬到项目根保留,再删 .tidykeep
+  const backupDir = join(target, '.tidykeep', 'backup');
+  if (problems.length && existsSync(backupDir) && readdirSync(backupDir).length) {
+    const stamp = new Date().toISOString().slice(0, 19).replaceAll(':', '-');
+    const dest = join(target, `.tidykeep-backup-${stamp}`);
+    renameSync(backupDir, dest);
+    log(`警告: ${problems.join('、')} 需要手工处理,接入前的原始备份已保留到 ${dest.split('/').pop()}/`);
+  }
   rmSync(join(target, '.tidykeep'), { recursive: true, force: true });
   log('卸载完成 ✅');
   return 0;

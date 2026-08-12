@@ -180,3 +180,12 @@ test('codex-stop: 与 claude 同构 block JSON', () => {
   const r = runHook(root, 'codex-stop', { cwd: root, session_id: 'c1' });
   assert.equal(JSON.parse(r.stdout).decision, 'block');
 });
+
+test('codex-stop warn 模式 → systemMessage(Codex Stop 官方不支持 additionalContext)', () => {
+  const root = dirtyRepo();
+  writeFileSync(join(root, '.tidykeep', 'config.jsonc'), '{ "ENFORCE_LEDGER": "warn" }');
+  const r = runHook(root, 'codex-stop', { cwd: root, session_id: 'cw' });
+  const out = JSON.parse(r.stdout);
+  assert.ok(out.systemMessage.includes('LEDGER'));
+  assert.equal(out.hookSpecificOutput, undefined);
+});

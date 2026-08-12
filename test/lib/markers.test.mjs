@@ -94,3 +94,43 @@ test('file 包装: 新建 → created;再写 → modified;剥空且为本工具�
   assert.equal(stripBlockFile(join(dir, 'nope.md'), B, E), 'missing');
   assert.ok(existsSync(f));
 });
+
+// ---------- 审查确认缺陷:标记不成对/逆序的安全语义 ----------
+
+test('孤立 begin(end 被误删):upsert 拒绝改写,原文不动', () => {
+  const orphan = `head\n${B}\n内容\n尾部用户内容\n`;
+  const r = upsertBlockText(orphan, B, E, 'X');
+  assert.equal(r.status, 'unpaired');
+  assert.equal(r.text, orphan);
+});
+
+test('逆序标记(end 在 begin 前):upsert 与 strip 都拒绝,用户内容不丢不重复', () => {
+  const t = `head\n${E}\nUSER-MIDDLE\n${B}\ntail\n`;
+  const u = upsertBlockText(t, B, E, 'X');
+  assert.equal(u.status, 'unpaired');
+  assert.equal(u.text, t);
+  const s = stripBlockText(t, B, E);
+  assert.equal(s.status, 'unpaired');
+  assert.equal(s.text, t);
+});
+
+test('merge 产生的重复完整块:strip 全部剥除,upsert 归并为一个', () => {
+  const dup = `${B}\nA\n${E}\nuser\n${B}\nA\n${E}\n`;
+  const s = stripBlockText(dup, B, E);
+  assert.equal(s.status, 'ok');
+  assert.equal(s.text, 'user\n');
+  const u = upsertBlockText(dup, B, E, 'NEW');
+  assert.equal(u.status, 'ok');
+  assert.equal((u.text.match(new RegExp('tidykeep:begin', 'g')) ?? []).length, 1);
+  assert.ok(u.text.includes('NEW') && u.text.includes('user'));
+});
+
+test('file 包装: 不成对标记返回 unpaired 且文件保持原样', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tk-markers-unpaired-'));
+  const f = join(dir, 'AGENTS.md');
+  const orphan = `head\n${B}\n内容\n## 用户附录\n`;
+  writeFileSync(f, orphan);
+  assert.equal(upsertBlockFile(f, B, E, 'X'), 'unpaired');
+  assert.equal(stripBlockFile(f, B, E), 'unpaired');
+  assert.equal(readFileSync(f, 'utf8'), orphan);
+});

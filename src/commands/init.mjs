@@ -111,10 +111,20 @@ export function init(targetArg, opts = {}) {
   if (!existsSync(join(tk, 'allowlist'))) copyFileSync(join(PAYLOAD, 'allowlist'), join(tk, 'allowlist'));
   const scratch = (opts.scratchDir ?? legacyCfg?.SCRATCH_DIR ?? '.tmp').replace(/^\/+|\/+$/g, '');
 
+  // 标记不成对(误删/merge 冲突)时拒绝改写,避免吞掉用户内容
+  const upsertRecorded = (rel, begin, end, content) => {
+    const st = upsertBlockFile(join(target, rel), begin, end, content);
+    if (st === 'unpaired') {
+      log(`警告: ${rel} 中 tidykeep 标记不成对(可能被误删或 merge 冲突),本次未改写该文件;请手工修复标记后重跑 init`);
+      return false;
+    }
+    recordFile(manifest, rel, st);
+    return true;
+  };
+
   // ---------- 3. AGENTS.md(唯一规则入口) ----------
   const rules = readFileSync(join(PAYLOAD, 'rules.md'), 'utf8');
-  recordFile(manifest, 'AGENTS.md', upsertBlockFile(join(target, 'AGENTS.md'), MD_BEGIN, MD_END, rules));
-  log('AGENTS.md 协议块已注入');
+  if (upsertRecorded('AGENTS.md', MD_BEGIN, MD_END, rules)) log('AGENTS.md 协议块已注入');
 
   // ---------- 4. STATE / LEDGER / 草稿区 / gitignore / gitattributes ----------
   for (const f of ['STATE.md', 'LEDGER.md']) {
@@ -125,12 +135,12 @@ export function init(targetArg, opts = {}) {
     }
   }
   mkdirSync(join(target, scratch), { recursive: true });
-  recordFile(manifest, '.gitignore', upsertBlockFile(join(target, '.gitignore'), HASH_BEGIN, HASH_END, gitignoreBlock(scratch)));
-  recordFile(manifest, '.gitattributes', upsertBlockFile(join(target, '.gitattributes'), HASH_BEGIN, HASH_END, GITATTRIBUTES_BLOCK));
+  upsertRecorded('.gitignore', HASH_BEGIN, HASH_END, gitignoreBlock(scratch));
+  upsertRecorded('.gitattributes', HASH_BEGIN, HASH_END, GITATTRIBUTES_BLOCK);
 
   // ---------- 5. Claude Code ----------
   if (agents.has('claude')) {
-    recordFile(manifest, 'CLAUDE.md', upsertBlockFile(join(target, 'CLAUDE.md'), MD_BEGIN, MD_END, CLAUDE_POINTER));
+    upsertRecorded('CLAUDE.md', MD_BEGIN, MD_END, CLAUDE_POINTER);
     const settingsPath = join(target, '.claude', 'settings.json');
     const before = existsSync(settingsPath) ? readFileSync(settingsPath, 'utf8') : undefined;
     if (before !== undefined && !existsSync(join(tk, 'backup', 'settings.json.bak'))) {

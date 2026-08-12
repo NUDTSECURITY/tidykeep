@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync,
+  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -193,4 +193,51 @@ test('init 后 Claude hook 真实链路可用(灌 stdin 走 vendored runtime)', 
     encoding: 'utf8', cwd: root, env,
   });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
+});
+
+// ---------- 审查确认缺陷的回归测试 ----------
+
+test('uninstall: settings.json 无法解析时,备份保留到项目根并在警告中给出位置', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  mkdirSync(join(root, '.claude'), { recursive: true });
+  writeFileSync(join(root, '.claude', 'settings.json'), '{"permissions":{"allow":["Bash(ls:*)"]}}');
+  assert.equal(run(['init', root], env).status, 0);
+  writeFileSync(join(root, '.claude', 'settings.json'),
+    readFileSync(join(root, '.claude', 'settings.json'), 'utf8') + '// 用户手滑加的注释');
+  const r = run(['uninstall', root], env);
+  assert.equal(r.status, 0);
+  const moved = readdirSync(root).find((n) => n.startsWith('.tidykeep-backup-'));
+  assert.ok(moved, '备份目录应保留在项目根');
+  assert.ok(existsSync(join(root, moved, 'settings.json.bak')));
+  assert.ok((r.stdout + r.stderr).includes(moved), '警告应给出备份新位置');
+});
+
+test('uninstall: AGENTS.md 标记不成对 → 拒绝改写并警告,用户内容保留', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  writeFileSync(join(root, 'AGENTS.md'), '# mine\n');
+  assert.equal(run(['init', root], env).status, 0);
+  const broken = readFileSync(join(root, 'AGENTS.md'), 'utf8').replace('<!-- tidykeep:end -->', '')
+    + '\n## user appendix\nvery important\n';
+  writeFileSync(join(root, 'AGENTS.md'), broken);
+  // re-init 也不得在不成对状态下改写
+  assert.equal(run(['init', root], env).status, 0);
+  assert.equal(readFileSync(join(root, 'AGENTS.md'), 'utf8'), broken, 're-init 不得改写不成对文件');
+  const r = run(['uninstall', root], env);
+  const after = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+  assert.ok(after.includes('user appendix'), '用户内容不得被删');
+  assert.ok((r.stdout + r.stderr).includes('不成对'), '应警告标记不成对');
+});
+
+test('Kimi 引用计数:symlink 路径 init、真实路径 uninstall 视为同一项目,全局块正确移除', () => {
+  const { env, kimiHome } = makeEnvHome();
+  const root = makeRepo();
+  const link = root + '-link';
+  symlinkSync(root, link);
+  assert.equal(run(['init', link], env).status, 0);
+  assert.ok(readFileSync(join(kimiHome, 'config.toml'), 'utf8').includes('[[hooks]]'));
+  assert.equal(run(['uninstall', root], env).status, 0);
+  assert.equal(readFileSync(join(kimiHome, 'config.toml'), 'utf8').includes('[[hooks]]'), false,
+    'symlink 与真实路径应归一,最后一个项目卸载后全局块移除');
 });

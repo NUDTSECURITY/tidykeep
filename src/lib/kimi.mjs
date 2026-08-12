@@ -1,10 +1,14 @@
 // Kimi Code 全局层:hooks 只能配置在用户全局 config.toml(项目级 local.toml 仅支持
-// [workspace],官方文档核实于 2026-08),因此这里以标记行块注入全局文件,并用
-// ~/.tidykeep/manifest.json 维护"哪些项目在用"的引用计数——最后一个项目卸载时
-// 才剥离全局块并移除 shim。config.toml 不做 TOML 解析,纯行级标记块操作。
+// [workspace],官方文档核实于 2026-08),因此这里以标记行块注入全局文件,并以
+// ~/.tidykeep/projects.d/ 下"每项目一个标记文件"维护引用计数——原子创建/删除,
+// 天然并发安全;最后一个项目卸载时才剥离全局块并移除 shim。
+// 项目键做 realpath + (win32) 大小写折叠归一,symlink/大小写差异视为同一项目。
+// config.toml 不做 TOML 解析,纯行级标记块操作。
 import {
-  copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync,
+  copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync,
+  realpathSync, unlinkSync, writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { upsertBlockText, stripBlockText } from './markers.mjs';
@@ -19,16 +23,34 @@ export function kimiPaths(env = process.env) {
     configToml: join(kimiHome, 'config.toml'),
     userDir,
     shim: join(userDir, 'kimi-shim.mjs'),
-    userManifest: join(userDir, 'manifest.json'),
+    projectsDir: join(userDir, 'projects.d'),
   };
 }
 
-function loadUserManifest(path) {
-  try {
-    return { projects: [], ...JSON.parse(readFileSync(path, 'utf8')) };
-  } catch {
-    return { projects: [] };
+/** 项目引用计数键:realpath 归一 symlink,win32 折叠大小写 */
+function canonicalKey(projectRoot) {
+  let abs;
+  try { abs = realpathSync(projectRoot); } catch { abs = resolve(projectRoot); }
+  let key = toPosix(abs);
+  if (process.platform === 'win32') key = key.toLowerCase();
+  return key;
+}
+
+const entryPath = (projectsDir, key) => join(projectsDir, createHash('sha1').update(key).digest('hex'));
+
+/** 现存注册项目数(顺带清理指向已消失目录的陈旧条目) */
+function liveProjects(projectsDir) {
+  let names;
+  try { names = readdirSync(projectsDir); } catch { return 0; }
+  let live = 0;
+  for (const name of names) {
+    const p = join(projectsDir, name);
+    let recorded = '';
+    try { recorded = readFileSync(p, 'utf8').trim(); } catch { continue; }
+    if (recorded && existsSync(recorded)) live++;
+    else { try { unlinkSync(p); } catch { /* 竞态忽略 */ } }
   }
+  return live;
 }
 
 export function installKimiGlobal(projectRoot, { env = process.env, payloadDir, log = () => {} }) {
@@ -43,16 +65,17 @@ export function installKimiGlobal(projectRoot, { env = process.env, payloadDir, 
     log(kimiTomlBlock(toPosix(p.shim)));
     return { status: 'skipped-inline-hooks' };
   }
+  const { text: next, status } = upsertBlockText(tomlText, HASH_BEGIN, HASH_END, kimiTomlBlock(toPosix(p.shim)));
+  if (status === 'unpaired') {
+    log(`警告: ${p.configToml} 中 tidykeep 标记不成对(可能被手工改动),拒绝自动注入;请手工修复标记后重跑 init`);
+    return { status: 'skipped-unpaired' };
+  }
 
-  mkdirSync(p.userDir, { recursive: true });
+  mkdirSync(p.projectsDir, { recursive: true });
   copyFileSync(join(payloadDir, 'runtime', 'kimi-shim.mjs'), p.shim);
+  const key = canonicalKey(projectRoot);
+  writeFileSync(entryPath(p.projectsDir, key), key + '\n');
 
-  const um = loadUserManifest(p.userManifest);
-  const rootAbs = toPosix(resolve(projectRoot));
-  if (!um.projects.includes(rootAbs)) um.projects.push(rootAbs);
-  writeFileSync(p.userManifest, JSON.stringify(um, null, 2) + '\n');
-
-  const { text: next } = upsertBlockText(tomlText, HASH_BEGIN, HASH_END, kimiTomlBlock(toPosix(p.shim)));
   if (next !== tomlText) {
     if (tomlText) {
       const backupDir = join(p.userDir, 'backup');
@@ -66,26 +89,28 @@ export function installKimiGlobal(projectRoot, { env = process.env, payloadDir, 
 
 export function uninstallKimiGlobal(projectRoot, { env = process.env, log = () => {} }) {
   const p = kimiPaths(env);
-  const um = loadUserManifest(p.userManifest);
-  const rootAbs = toPosix(resolve(projectRoot));
-  const before = um.projects.length;
-  um.projects = um.projects.filter((x) => x !== rootAbs);
   if (!existsSync(p.userDir)) return { status: 'not-installed' };
-  if (um.projects.length > 0) {
-    writeFileSync(p.userManifest, JSON.stringify(um, null, 2) + '\n');
-    if (before !== um.projects.length) log(`Kimi 全局 hooks 保留(仍有 ${um.projects.length} 个项目在用)`);
-    return { status: 'kept', remaining: um.projects.length };
+  const key = canonicalKey(projectRoot);
+  try { unlinkSync(entryPath(p.projectsDir, key)); } catch { /* 未注册即视为已清理 */ }
+
+  const remaining = liveProjects(p.projectsDir);
+  if (remaining > 0) {
+    log(`Kimi 全局 hooks 保留(仍有 ${remaining} 个项目在用)`);
+    return { status: 'kept', remaining };
   }
-  // 最后一个项目:剥全局块、移除 shim 与用户清单(备份保留)
+  // 最后一个项目:剥全局块、移除 shim 与注册目录(备份保留)
   if (existsSync(p.configToml)) {
     const text = readFileSync(p.configToml, 'utf8');
-    const { text: stripped, stripped: did } = stripBlockText(text, HASH_BEGIN, HASH_END);
-    if (did) writeFileSync(p.configToml, stripped);
+    const { text: strippedText, stripped, status } = stripBlockText(text, HASH_BEGIN, HASH_END);
+    if (status === 'unpaired') {
+      log(`警告: ${p.configToml} 中 tidykeep 标记不成对,未自动剥离;请手工移除该块`);
+    } else if (stripped) {
+      writeFileSync(p.configToml, strippedText);
+    }
   }
-  for (const f of [p.shim, p.userManifest]) {
-    try { unlinkSync(f); } catch { /* 不存在即视为已清理 */ }
-  }
-  try { rmSync(p.userDir, { recursive: false }); } catch { /* 留有 backup/ 时保留目录 */ }
+  try { unlinkSync(p.shim); } catch { /* 不存在即已清理 */ }
+  try { rmdirSync(p.projectsDir); } catch { /* 竞态残留无害 */ }
+  try { rmdirSync(p.userDir); } catch { /* 留有 backup/ 时保留目录 */ }
   log('Kimi 全局 hooks 已移除(最后一个使用项目已卸载)');
   return { status: 'removed' };
 }

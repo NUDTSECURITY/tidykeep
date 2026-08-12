@@ -51,3 +51,12 @@ test('loadManifest: 存在旧文本清单时自动迁移读取', () => {
   assert.equal(m.files['STATE.md'], 'created');
   assert.equal(m.hookspath, 'external');
 });
+
+test('recordFile: 新状态为 created 时刷新过期的 modified 记录(用户删文件后 re-init)', () => {
+  const m = loadManifest('/nonexistent-dir-y');
+  recordFile(m, 'AGENTS.md', 'modified');
+  recordFile(m, 'AGENTS.md', 'created');
+  assert.equal(m.files['AGENTS.md'], 'created');
+  recordFile(m, 'AGENTS.md', 'modified');
+  assert.equal(m.files['AGENTS.md'], 'created', 'created 不被后续 modified 降级');
+});

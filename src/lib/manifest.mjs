@@ -53,7 +53,11 @@ export function saveManifest(dir, m) {
 }
 
 export function recordFile(m, rel, state) {
-  if (!(rel in m.files)) m.files[rel] = state;
+  // first-wins 保护用户原有文件;唯一例外:再次 init 时文件实际是新建的(用户已删除
+  // 原文件),说明当前内容完全属于本工具,过期的 modified 记录应刷新为 created。
+  if (!(rel in m.files) || (state === 'created' && m.files[rel] !== 'created')) {
+    m.files[rel] = state;
+  }
 }
 
 export function wasCreated(m, rel) {
