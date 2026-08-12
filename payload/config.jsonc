@@ -1,0 +1,30 @@
+// tidykeep 配置(JSONC:支持 // 注释与尾逗号)。改后即时生效,无需重装。
+// 本文件由 `npx tidykeep init` 首次创建后不再覆盖;新版本新增的键会追加到文件末尾。
+{
+  // 文件命名守卫:拦截 _v2/_old/_final/_backup/copy/副本 等历史副本命名(true/false)
+  "GUARD": true,
+
+  // 台账同步强制等级:"block"(阻止收工/提交)/ "warn"(仅提醒)/ "off"
+  "ENFORCE_LEDGER": "block",
+
+  // 被视为"代码/文档改动"、从而要求同步台账的扩展名
+  "CODE_EXTS": ["py", "js", "ts", "tsx", "jsx", "mjs", "cjs", "go", "rs", "java", "rb", "php", "c", "cc", "cpp", "h", "hpp", "cs", "swift", "kt", "scala", "sql", "sh", "bash", "zsh", "vue", "svelte", "ipynb"],
+  "DOC_EXTS": ["md", "rst", "txt", "adoc"],
+
+  // 历史副本命名模式(JS RegExp 语法,忽略大小写)
+  // 命中示例:train_v2.py / a_old.ts / b-final.go / c_backup.sh / d copy.py / e(1).md / f副本.md
+  "STALE_RE": "([_. -](v[0-9]+|old|new|final|finalfinal|backup|bak|copy[0-9]*|dup|tmp|temp|deprecated|legacy|orig)[_. -]*|\\([0-9]+\\)|副本|旧版|备份)\\.[A-Za-z0-9]+$",
+
+  // 项目内草稿区目录名(已 gitignore;一次性/验证脚本专用,守卫不检查此目录内部)
+  "SCRATCH_DIR": ".tmp",
+
+  // 禁止在系统临时目录(/tmp、/var/tmp、~/tmp、~/.tmp、$TMPDIR、%TEMP%、/dev/shm)创建文件
+  "FORBID_SYSTEM_TMP": true,
+
+  // 收尾时检查草稿区是否有残留文件并要求清理或说明
+  "CHECK_TMP_LEFTOVER": true,
+
+  // commit 主题/正文最小长度(按字符计,中英文同权)
+  "MIN_SUBJECT": 10,
+  "MIN_BODY": 20,
+}
