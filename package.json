@@ -1,0 +1,37 @@
+{
+  "name": "tidykeep",
+  "version": "0.1.0",
+  "description": "跨 Agent(Claude Code / Codex / Kimi Code)的项目知识保鲜工具:AGENTS.md 唯一规则入口、STATE/LEDGER 台账、native hooks 拦截历史副本命名与系统 /tmp 落盘、git hooks 兜底强制详细提交。",
+  "type": "module",
+  "bin": {
+    "tidykeep": "bin/tidykeep.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "payload/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aidpaike/tidykeep.git"
+  },
+  "keywords": [
+    "agents-md",
+    "claude-code",
+    "codex",
+    "kimi",
+    "hooks",
+    "git-hooks",
+    "knowledge-management",
+    "code-hygiene"
+  ],
+  "license": "MIT"
+}
