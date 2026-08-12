@@ -8,7 +8,7 @@ import {
   toPosix, normalizePath, inProject, systemTmpPrefixes,
   classifyWritePath, visibleShellLines, scanBashCommand,
   ledgerSyncCheck, scratchLeftovers, checkStagedNames, stagedLedgerSync,
-  checkCommitMsg, countChars, parseApplyPatch, stopFlagPath,
+  checkCommitMsg, countChars, parseApplyPatch, stopFlagPath, newDoneItemsFromDiff, buildAutoCommitMessage,
 } from '../../payload/runtime/core.mjs';
 
 const ROOT = '/proj';
@@ -282,4 +282,25 @@ test('scanBashCommand 方向敏感:cp 以 /tmp 为源、项目为目标 → 放�
 test('stopFlagPath: 超长 session id 被摘要,文件名可写', () => {
   const p = stopFlagPath('/proj', 'x'.repeat(500));
   assert.ok(p.split('/').pop().length < 120);
+});
+
+// ---------- AUTO_COMMIT ----------
+
+test('newDoneItemsFromDiff: 从 LEDGER diff 提取本次新增的 DONE 条目', () => {
+  const diff = [
+    '+++ b/LEDGER.md',
+    '+  - [x] 2026-08-12 支持断点续训,合并删除 train_v2.py',
+    ' - [x] 2026-08-11 旧条目不算',
+    '+  - [ ] 新 TODO 不算',
+    '+  - [x] 2026-08-12 修复数据加载竞态',
+  ].join('\n');
+  assert.deepEqual(newDoneItemsFromDiff(diff), ['支持断点续训,合并删除 train_v2.py', '修复数据加载竞态']);
+});
+
+test('buildAutoCommitMessage: 满足自身 commit-msg 规范(主题/正文长度)', () => {
+  const c = cfg();
+  const withItems = buildAutoCommitMessage(['支持断点续训'], ['train.py', 'LEDGER.md']);
+  assert.equal(checkCommitMsg(withItems, c).ok, true);
+  const noItems = buildAutoCommitMessage([], ['a.py', 'b.py', 'LEDGER.md']);
+  assert.equal(checkCommitMsg(noItems, c).ok, true);
 });

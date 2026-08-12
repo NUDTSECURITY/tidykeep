@@ -33,6 +33,11 @@ export function denyReason(source, v) {
     + `误报可将路径加入 .tidykeep/allowlist 后重试。`;
 }
 
+export function msgCommitRemind() {
+  return 'tidykeep 提醒:任务已按协议收尾(台账已同步),但改动尚未提交——'
+    + '请按 AGENTS.md 的 Commit 规范提交(主题 + 为什么 + 影响)。本会话此提醒只出现一次。';
+}
+
 export function msgLedgerSync() {
   return '源码/文档已改动,但 LEDGER.md / STATE.md 未同步——请把本次完成项移入'
     + ' LEDGER.md 的 DONE(附今天日期)、登记新 TODO、刷新『最后核对』;'

@@ -104,6 +104,7 @@
 - DONE:
   - [x] 2026-08-12 检查逻辑唯一真源,行为对齐 python 基线(heredoc/mktemp/台账矩阵/码点计数)
   - [x] 2026-08-12 审查修复:here-string 按 shell 门控、方向敏感扫描、尾随换行防绕过、POSIX 大小写、UNC、~user、status -uall -z、scissors 截断、超长 session id 摘要
+  - [x] 2026-08-12 新增 AUTO_COMMIT 配置键与 newDoneItemsFromDiff / buildAutoCommitMessage(自动提交信息生成,满足自身 commit-msg 规范)
 
 ## payload/runtime/hook.mjs
 
@@ -113,6 +114,7 @@
 - DONE:
   - [x] 2026-08-12 三家统一入口,异常一律放行(guardrail 契约)
   - [x] 2026-08-12 审查修复:写入工具名正向门控(只读工具放行)、Stop 标记写失败降级 warn、Codex warn 用 systemMessage
+  - [x] 2026-08-12 AUTO_COMMIT 三档:Stop 时"有改动且台账已同步"触发 remind 打回/auto 直接提交(信息取 LEDGER 新增 DONE,失败原因喂回 agent)
 
 ## payload/runtime/githook.mjs
 

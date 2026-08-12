@@ -6,6 +6,7 @@
 import {
   existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import * as core from './core.mjs';
 import * as msg from './messages.mjs';
@@ -115,48 +116,99 @@ function gcFlags(stateDir) {
   }
 }
 
+function gitIn(root, ...args) {
+  return spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 15000, shell: false });
+}
+
+/** 收尾完成态(有改动且台账已同步)下的自动提交 / 提交提醒 */
+function maybeAutoCommit(agent, payload, ctx, entries) {
+  const { cfg, root } = ctx;
+  const autoMode = String(cfg.AUTO_COMMIT ?? 'off').toLowerCase();
+  if (autoMode !== 'auto' && autoMode !== 'remind') return;
+  if (!entries || !entries.length) return; // 无改动(纯对话回合)不触发
+  const { needSync, ledgerChanged } = core.ledgerSyncCheck(entries, cfg);
+  // "功能完成"的确定性信号:台账被更新过且不再欠账——半成品(未收尾)不提交
+  if (needSync || !ledgerChanged) return;
+
+  if (autoMode === 'remind') {
+    const flag = core.stopFlagPath(root, payload.session_id) + '-commit';
+    if (existsSync(flag)) return;
+    try {
+      mkdirSync(dirname(flag), { recursive: true });
+      writeFileSync(flag, '1');
+    } catch {
+      emitStopWarn(agent, msg.msgCommitRemind());
+      return;
+    }
+    emitStopBlock(agent, msg.msgCommitRemind());
+    return;
+  }
+
+  // auto:hook 直接提交;信息取自 LEDGER 本次新增的 DONE 条目,仍经 git hooks 校验
+  if (gitIn(root, 'add', '-A').status !== 0) return;
+  const files = (gitIn(root, 'diff', '--cached', '--name-only', '-z').stdout ?? '')
+    .split('\0').filter(Boolean);
+  if (!files.length) return;
+  const ledgerDiff = gitIn(root, 'diff', '--cached', '--', 'LEDGER.md').stdout ?? '';
+  const message = core.buildAutoCommitMessage(core.newDoneItemsFromDiff(ledgerDiff), files);
+  const commit = gitIn(root, 'commit', '-m', message);
+  if (commit.status === 0) {
+    const hash = (gitIn(root, 'rev-parse', '--short', 'HEAD').stdout ?? '').trim();
+    emitStopWarn(agent, `tidykeep 已自动提交(AUTO_COMMIT=auto):${hash} ${message.split('\n')[0]}`);
+  } else {
+    // 被自身 pre-commit/commit-msg 拒绝等——把原因喂回 agent 去修,不静默
+    const why = ((commit.stderr ?? '') + (commit.stdout ?? '')).trim().slice(-600);
+    emitStopWarn(agent, `tidykeep 自动提交未成功,请手工处理:${why}`);
+  }
+}
+
 function handleStop(agent, payload, ctx) {
   if (payload.stop_hook_active) return; // 官方防死循环信号(Claude/Codex 已确认,Kimi 防御式尊重)
   const { cfg, root } = ctx;
   const mode = String(cfg.ENFORCE_LEDGER ?? 'block').toLowerCase();
   const checkTmp = cfg.CHECK_TMP_LEFTOVER !== false;
-  if (mode === 'off' && !checkTmp) return;
+  const autoMode = String(cfg.AUTO_COMMIT ?? 'off').toLowerCase();
+  if (mode === 'off' && !checkTmp && autoMode === 'off') return;
 
   const flag = core.stopFlagPath(root, payload.session_id);
-  if (existsSync(flag)) return; // 本会话已强制过一次
+  const flagUsed = existsSync(flag); // 本会话已强制过一次 → 不再打回,但仍可自动提交
   gcFlags(dirname(flag));
+  const entries = core.gitStatusEntries(root);
 
-  const issues = [];
-  if (mode !== 'off') {
-    const entries = core.gitStatusEntries(root);
-    if (entries && core.ledgerSyncCheck(entries, cfg).needSync) issues.push(msg.msgLedgerSync());
-  }
-  if (checkTmp) {
-    const leftovers = core.scratchLeftovers(root, cfg);
-    if (leftovers.length) {
-      issues.push(msg.msgScratchLeftover(cfg.SCRATCH_DIR ?? '.tmp', leftovers));
+  if (!flagUsed) {
+    const issues = [];
+    if (mode !== 'off' && entries && core.ledgerSyncCheck(entries, cfg).needSync) {
+      issues.push(msg.msgLedgerSync());
     }
-  }
-  if (!issues.length) return;
-
-  const reason = 'tidykeep 收尾检查:'
-    + issues.map((s, i) => `(${i + 1}) ${s}`).join(' ')
-    + ' ' + msg.STOP_TAIL;
-
-  if (mode === 'block') {
-    try {
-      mkdirSync(dirname(flag), { recursive: true });
-      writeFileSync(flag, '1');
-    } catch {
-      // 标记写不进去就无法保证"每会话只强制一次",block 会变成反复骚扰
-      // (Kimi 无官方防死循环信号时甚至收不了工)——降级为 warn
-      emitStopWarn(agent, reason);
+    if (checkTmp) {
+      const leftovers = core.scratchLeftovers(root, cfg);
+      if (leftovers.length) {
+        issues.push(msg.msgScratchLeftover(cfg.SCRATCH_DIR ?? '.tmp', leftovers));
+      }
+    }
+    if (issues.length) {
+      const reason = 'tidykeep 收尾检查:'
+        + issues.map((s, i) => `(${i + 1}) ${s}`).join(' ')
+        + ' ' + msg.STOP_TAIL;
+      if (mode === 'block') {
+        try {
+          mkdirSync(dirname(flag), { recursive: true });
+          writeFileSync(flag, '1');
+        } catch {
+          // 标记写不进去就无法保证"每会话只强制一次",block 会变成反复骚扰
+          // (Kimi 无官方防死循环信号时甚至收不了工)——降级为 warn
+          emitStopWarn(agent, reason);
+          return;
+        }
+        emitStopBlock(agent, reason);
+      } else {
+        emitStopWarn(agent, reason);
+      }
       return;
     }
-    emitStopBlock(agent, reason);
-  } else {
-    emitStopWarn(agent, reason);
   }
+
+  maybeAutoCommit(agent, payload, ctx, entries);
 }
 
 function main() {

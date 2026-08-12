@@ -27,4 +27,9 @@
   // commit 主题/正文最小长度(按字符计,中英文同权)
   "MIN_SUBJECT": 10,
   "MIN_BODY": 20,
+
+  // 收尾自动提交:"off" / "remind"(收尾完成未提交时打回一次,让 agent 写详细提交)
+  // / "auto"(hook 直接提交,信息取自 LEDGER 本次新增的 DONE 条目,仍过 git hooks 校验)。
+  // 触发条件 = 工作区有改动 且 台账已同步(即一段功能按协议收尾完成);纯对话不触发。
+  "AUTO_COMMIT": "off",
 }

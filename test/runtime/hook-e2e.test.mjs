@@ -234,3 +234,55 @@ test('kimi-shim: vendored runtime 损坏 → 静默放行 exit 0,无堆栈泄露
   assert.equal(r.status, 0);
   assert.equal(r.stderr.trim(), '');
 });
+
+// ---------- AUTO_COMMIT(功能收尾自动提交) ----------
+
+function syncedRepo(autoMode) {
+  const root = makeProject({ git: true });
+  writeFileSync(join(root, '.tidykeep', 'config.jsonc'), JSON.stringify({ AUTO_COMMIT: autoMode }));
+  writeFileSync(join(root, 'LEDGER.md'), '# 台账\n## code.py\n- DONE:\n');
+  writeFileSync(join(root, 'code.py'), 'print(1)\n');
+  execFileSync('git', ['-C', root, 'add', '-A']);
+  execFileSync('git', ['-C', root, 'commit', '-qm', 'base commit for auto-commit fixture']);
+  // 一段"功能":改代码 + 按协议同步台账(= 收尾完成信号)
+  writeFileSync(join(root, 'code.py'), 'print(2)\n');
+  writeFileSync(join(root, 'LEDGER.md'), '# 台账\n## code.py\n- DONE:\n  - [x] 2026-08-12 输出改为 2,验证自动提交链路\n');
+  return root;
+}
+
+const gitLogCount = (root) => execFileSync('git', ['-C', root, 'rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim();
+
+test('AUTO_COMMIT=auto: 台账已同步 + 有改动 → Stop 时自动提交,信息含 DONE 条目', () => {
+  const root = syncedRepo('auto');
+  assert.equal(gitLogCount(root), '1');
+  const r = runHook(root, 'claude-stop', { cwd: root, session_id: 'ac1' });
+  assert.equal(r.status, 0);
+  assert.equal(gitLogCount(root), '2', '应产生一次自动提交');
+  const last = execFileSync('git', ['-C', root, 'log', '-1', '--format=%B'], { encoding: 'utf8' });
+  assert.ok(last.includes('输出改为 2'), '提交信息应取自 LEDGER 新增 DONE');
+  assert.ok(JSON.parse(r.stdout).hookSpecificOutput.additionalContext.includes('自动提交'));
+  // 再次 Stop:无改动 → 不再提交
+  const r2 = runHook(root, 'claude-stop', { cwd: root, session_id: 'ac1' });
+  assert.equal(r2.stdout.trim(), '');
+  assert.equal(gitLogCount(root), '2');
+});
+
+test('AUTO_COMMIT=remind: 收尾完成未提交 → block 一次提醒;第二次放行', () => {
+  const root = syncedRepo('remind');
+  const r = runHook(root, 'claude-stop', { cwd: root, session_id: 'rc1' });
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.ok(out.reason.includes('提交'));
+  assert.equal(gitLogCount(root), '1', 'remind 不代劳提交');
+  const r2 = runHook(root, 'claude-stop', { cwd: root, session_id: 'rc1' });
+  assert.equal(r2.stdout.trim(), '');
+});
+
+test('AUTO_COMMIT=auto: 台账未同步 → 走原有 block,不自动提交半成品', () => {
+  const root = syncedRepo('auto');
+  writeFileSync(join(root, 'LEDGER.md'), '# 台账\n## code.py\n- DONE:\n'); // 回退台账 = 未收尾
+  const r = runHook(root, 'claude-stop', { cwd: root, session_id: 'ac2' });
+  assert.equal(JSON.parse(r.stdout).decision, 'block');
+  assert.ok(JSON.parse(r.stdout).reason.includes('LEDGER'));
+  assert.equal(gitLogCount(root), '1');
+});

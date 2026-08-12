@@ -26,6 +26,11 @@ export const DEFAULT_CONFIG = {
   // commit 信息最小长度(按字符,中英同权)
   MIN_SUBJECT: 10,
   MIN_BODY: 20,
+  // 收尾自动提交:off(默认)/ remind(收尾完成未提交时打回一次,让 agent 自己写
+  // 详细提交)/ auto(hook 直接提交,信息取自 LEDGER 本次新增的 DONE 条目)。
+  // 触发条件是"工作区有改动且台账已同步"——即按协议完成了一段功能的收尾;
+  // 纯对话回合没有改动,不会产生提交。
+  AUTO_COMMIT: 'off',
 };
 
 // ---------- JSONC ----------
@@ -493,6 +498,35 @@ export function checkCommitMsg(text, cfg) {
     subjectLen,
     bodyLen,
   };
+}
+
+// ---------- AUTO_COMMIT ----------
+
+/** 从 LEDGER.md 的 diff 中提取本次新增的 DONE 条目描述(自动提交信息的素材) */
+export function newDoneItemsFromDiff(diffText) {
+  const items = [];
+  for (const line of String(diffText).split('\n')) {
+    if (!line.startsWith('+') || line.startsWith('+++')) continue;
+    const m = line.match(/^\+\s*-\s*\[x\]\s*\d{4}-\d{2}-\d{2}\s*(.+)$/);
+    if (m) items.push(m[1].trim());
+  }
+  return items;
+}
+
+/** 生成满足自身 commit-msg 规范的自动提交信息 */
+export function buildAutoCommitMessage(items, files) {
+  const subject = items.length
+    ? `chore: 收尾提交——${items[0]}`.slice(0, 72)
+    : `chore: 收尾提交(${files.length} 个文件改动,台账已同步)`;
+  const shown = files.slice(0, 8).join('、') + (files.length > 8 ? '…' : '');
+  const lines = [
+    subject,
+    '',
+    '为什么: tidykeep AUTO_COMMIT——LEDGER/STATE 已同步,本段功能按协议收尾完成',
+    `影响: ${files.length} 个文件(${shown})`,
+  ];
+  if (items.length > 1) lines.push(`DONE: ${items.join(';')}`);
+  return lines.join('\n');
 }
 
 // ---------- 会话标记(防 Stop 死循环;放项目内 .state/,不落系统 tmp) ----------

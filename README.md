@@ -110,6 +110,7 @@ Kimi 用户各自跑一次 `npx tidykeep init`(Kimi hooks 在用户全局配置)
 | `FORBID_SYSTEM_TMP` | 禁止在系统 /tmp、~/tmp、~/.tmp、$TMPDIR、%TEMP% 落盘 | true |
 | `CHECK_TMP_LEFTOVER` | 收尾时检查草稿区残留文件 | true |
 | `MIN_SUBJECT` / `MIN_BODY` | commit 主题/正文最小字符数 | 10 / 20 |
+| `AUTO_COMMIT` | 收尾自动提交:off / remind(打回一次提醒提交,信息由 agent/人来写)/ auto(hook 直接提交,信息取自 LEDGER 新增 DONE 条目) | "off" |
 
 误报处理:把精确相对路径逐行加入 `.tidykeep/allowlist`。
 临时绕过提交检查:`TIDYKEEP_SKIP=1 git commit ...`(协议要求向协作者说明原因)。
@@ -141,6 +142,12 @@ Kimi 用户各自跑一次 `npx tidykeep init`(Kimi hooks 在用户全局配置)
 
 **Stop hook 会不会死循环?** 不会:识别官方 `stop_hook_active` 标志,且同一会话最多强制一次
 (标记存放于项目内 `.tidykeep/.state/`,不落系统 tmp;Claude 另有连续 block 上限 8 次的官方硬顶)。
+
+**自动提交怎么用?** `AUTO_COMMIT` 的触发条件是"工作区有改动 **且** 台账已同步"——按协议这就是
+一段功能收尾完成的确定性信号;纯对话回合没有改动,不会触发。判断"功能是否完成"这件事大模型
+并不可靠,所以推荐 `remind`(hook 只打回一次提醒,提交信息由 agent/人自己写,质量最好)或维持
+`off` 完全手动;`auto` 档由 hook 直接提交(信息自动取自 LEDGER 本次新增的 DONE 条目,照样要过
+pre-commit / commit-msg 校验),适合无人值守场景。
 
 **Windows?** 安装器与 hooks 全部为 Node 实现;git hooks 薄壳由 Git for Windows 自带的 sh 执行
 (husky 同款机制),`.gitattributes` 已注入 `eol=lf` 护栏防止 CRLF 污染。异常时 `npx tidykeep doctor --fix`。
