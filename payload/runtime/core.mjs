@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir as osHomedir, tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 export const DEFAULT_CONFIG = {
@@ -125,6 +126,7 @@ function isAbs(p) {
 }
 
 function squash(p) {
+  const unc = p.startsWith('//') && !p.startsWith('///'); // UNC \\server\share
   const isDrive = /^[A-Za-z]:\//.test(p);
   const parts = p.split('/');
   const out = [];
@@ -134,7 +136,8 @@ function squash(p) {
     if (seg === '..') { if (out.length > 1 || (out.length === 1 && out[0] !== '' && !isDrive)) out.pop(); continue; }
     out.push(seg);
   }
-  return out.join('/') || '/';
+  const s = out.join('/') || '/';
+  return unc ? '/' + s : s;
 }
 
 export function normalizePath(p, root, opts = {}) {
@@ -142,6 +145,12 @@ export function normalizePath(p, root, opts = {}) {
   let q = toPosix(p);
   if (q === '~') q = home;
   else if (q.startsWith('~/')) q = home + q.slice(1);
+  else if (/^~[^/]+/.test(q)) {
+    // ~otheruser/...:按"其他用户家目录"解析到当前家目录的父级(对齐 python
+    // expanduser 的放行语义——项目外路径,不做项目内命名裁决)
+    const parent = home.includes('/') ? home.slice(0, home.lastIndexOf('/')) : '/home';
+    q = parent + '/' + q.slice(1);
+  }
   if (!isAbs(q)) q = toPosix(root).replace(/\/+$/, '') + '/' + q;
   return squash(q);
 }
@@ -176,13 +185,34 @@ export function systemTmpPrefixes(root, opts = {}) {
   return [...new Set(list)];
 }
 
-function matchesTmpPrefix(abs, prefixes) {
-  const low = abs.toLowerCase();
-  return prefixes.some((p) => low.startsWith(p.toLowerCase()));
+function matchesTmpPrefix(abs, prefixes, platform = process.platform) {
+  // 大小写折叠仅用于本身大小写不敏感的路径体系(win32 / 盘符路径),
+  // POSIX 上 /TMP 与 /tmp 是不同目录,不得误判
+  return prefixes.some((p) => {
+    if (platform === 'win32' || /^[A-Za-z]:\//.test(p)) {
+      return abs.toLowerCase().startsWith(p.toLowerCase());
+    }
+    return abs.startsWith(p);
+  });
 }
 
 function scratchName(cfg) {
   return (cfg.SCRATCH_DIR ?? '.tmp').replace(/^\/+|\/+$/g, '') || '.tmp';
+}
+
+/** win32 下项目内相对路径比较不区分大小写 */
+function foldCase(s, platform) {
+  return platform === 'win32' ? s.toLowerCase() : s;
+}
+
+function relAllowed(rel, scratch, allow, platform) {
+  const r = foldCase(rel, platform);
+  if (r.startsWith(foldCase(scratch + '/', platform)) || r.startsWith(foldCase('.tidykeep/', platform))) return true;
+  if (allow.has(rel)) return true;
+  if (platform === 'win32') {
+    for (const a of allow) if (a.toLowerCase() === r) return true;
+  }
+  return false;
 }
 
 // ---------- 单文件写入裁决(Write/Edit 新建/NotebookEdit/apply_patch Add|Move 共用) ----------
@@ -190,21 +220,22 @@ function scratchName(cfg) {
 export function classifyWritePath(filePath, ctx) {
   const { root, cfg, allow = new Set(), opts = {} } = ctx;
   if (!filePath) return { decision: 'allow' };
+  const platform = opts.platform ?? process.platform;
   const tmpOn = cfg.FORBID_SYSTEM_TMP !== false;
   const guardOn = cfg.GUARD !== false;
   if (!tmpOn && !guardOn) return { decision: 'allow' };
   const scratch = scratchName(cfg);
-  const ap = normalizePath(filePath, root, opts);
+  // 尾随换行/回车是调用方笔误,python 的 $ 会在换行前命中,这里对齐(防绕过)
+  const cleaned = String(filePath).replace(/[\r\n]+$/, '');
+  const ap = normalizePath(cleaned, root, opts);
   const base = ap.split('/').pop();
   const inside = inProject(ap, root, opts);
-  if (tmpOn && !inside && matchesTmpPrefix(ap, systemTmpPrefixes(root, opts))) {
-    return { decision: 'deny', kind: 'system-tmp', detail: { base, path: String(filePath), scratch } };
+  if (tmpOn && !inside && matchesTmpPrefix(ap, systemTmpPrefixes(root, opts), platform)) {
+    return { decision: 'deny', kind: 'system-tmp', detail: { base, path: cleaned, scratch } };
   }
   if (!inside) return { decision: 'allow' }; // 项目外其他位置不在守卫职责内
   const rel = relToRoot(ap, root, opts);
-  if (rel.startsWith(scratch + '/') || rel.startsWith('.tidykeep/') || allow.has(rel)) {
-    return { decision: 'allow' };
-  }
+  if (relAllowed(rel, scratch, allow, platform)) return { decision: 'allow' };
   if (guardOn && cfg.staleRe.test(base)) {
     return { decision: 'deny', kind: 'stale-name', detail: { base, rel, scratch } };
   }
@@ -215,7 +246,7 @@ export function classifyWritePath(filePath, ctx) {
 
 const CREATE_VERB = /(^|[;&|(]\s*)(cp|mv|touch|tee|install|rsync|dd|truncate|new-item|out-file|set-content|add-content|copy-item|move-item)\b|>>?\s*\S|\bmktemp\b/i;
 
-export function visibleShellLines(cmd) {
+export function visibleShellLines(cmd, opts = {}) {
   const out = [];
   let term = null;      // heredoc 终止词
   let psQuote = null;   // PowerShell here-string 终止引号
@@ -232,27 +263,58 @@ export function visibleShellLines(cmd) {
     out.push(line);
     const m = line.match(/<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/);
     if (m) { term = m[1]; continue; }
-    const ps = line.match(/@(['"])\s*$/);
-    if (ps) psQuote = ps[1];
+    // here-string 是 PowerShell 独有语法;bash 命令里行尾的 @" 只是普通字符串
+    // (如 email),误入会吞掉后续所有行、绕过整段扫描——因此按 shell 类型门控
+    if (opts.powershell) {
+      const ps = line.match(/@(['"])\s*$/);
+      if (ps) psQuote = ps[1];
+    }
   }
   return out.join('\n');
 }
 
-function* tokens(text) {
-  for (const raw of text.split(/[\s;|&()<>]+/)) {
-    const tok = raw.replace(/^['"`]+|['"`]+$/g, '').replace(/[),;:]+$/, '');
-    if (tok) yield tok;
-  }
+function cleanToken(raw) {
+  return raw.replace(/^['"`]+|['"`]+$/g, '').replace(/[),;:]+$/, '');
 }
 
-export function scanBashCommand(cmd, ctx) {
+const isPathish = (tok) => tok.includes('/') || tok.includes('\\') || tok.startsWith('~');
+
+// 源/目标双操作数动词:读取源是合法方向,只有最后一个操作数(目标)算写入
+const COPY_VERBS = new Set(['cp', 'mv', 'rsync', 'install', 'copy-item', 'move-item']);
+
+/** 收集"疑似写入目标"的路径 token:copy 类动词只取末操作数,重定向目标恒计入 */
+function writeTargetTokens(visible) {
+  const targets = [];
+  for (const line of visible.split('\n')) {
+    for (const seg of line.split(/(?:\|\||&&|[;|&])+/)) {
+      const segTrim = seg.trim();
+      if (!segTrim) continue;
+      const verb = (segTrim.split(/\s+/)[0] ?? '').toLowerCase();
+      const pathToks = [];
+      for (const raw of segTrim.split(/[\s;|&()<>]+/)) {
+        const tok = cleanToken(raw);
+        if (tok && isPathish(tok)) pathToks.push(tok);
+      }
+      if (COPY_VERBS.has(verb)) targets.push(...pathToks.slice(-1));
+      else targets.push(...pathToks);
+      for (const m of segTrim.matchAll(/>>?\s*([^\s;|&()<>]+)/g)) {
+        const tok = cleanToken(m[1]);
+        if (tok && isPathish(tok)) targets.push(tok);
+      }
+    }
+  }
+  return targets;
+}
+
+export function scanBashCommand(cmd, ctx, scanOpts = {}) {
   const { root, cfg, allow = new Set(), opts = {} } = ctx;
   if (!cmd) return { decision: 'allow' };
+  const platform = opts.platform ?? process.platform;
   const tmpOn = cfg.FORBID_SYSTEM_TMP !== false;
   const guardOn = cfg.GUARD !== false;
   if (!tmpOn && !guardOn) return { decision: 'allow' };
   const scratch = scratchName(cfg);
-  const visible = visibleShellLines(cmd);
+  const visible = visibleShellLines(cmd, { powershell: scanOpts.powershell === true });
   if (!CREATE_VERB.test(visible)) return { decision: 'allow' };
 
   if (tmpOn && /\bmktemp\b/.test(visible)) {
@@ -264,18 +326,17 @@ export function scanBashCommand(cmd, ctx) {
   const prefixes = tmpOn ? systemTmpPrefixes(root, opts) : [];
   const tmpHits = [];
   const staleHits = [];
-  for (const tok of tokens(visible)) {
-    if (!tok.includes('/') && !tok.includes('\\') && !tok.startsWith('~')) continue;
+  for (const tok of writeTargetTokens(visible)) {
     const ap = normalizePath(tok, root, opts);
     const base = ap.split('/').pop();
     const inside = inProject(ap, root, opts);
-    if (tmpOn && !inside && matchesTmpPrefix(ap, prefixes) && base.includes('.')) {
+    if (tmpOn && !inside && matchesTmpPrefix(ap, prefixes, platform) && base.includes('.')) {
       tmpHits.push(tok);
       continue;
     }
     if (guardOn && inside) {
       const rel = relToRoot(ap, root, opts);
-      if (rel.startsWith(scratch + '/') || rel.startsWith('.tidykeep/') || allow.has(rel)) continue;
+      if (relAllowed(rel, scratch, allow, platform)) continue;
       if (base.includes('.') && cfg.staleRe.test(base)) staleHits.push(rel);
     }
   }
@@ -316,14 +377,20 @@ function ignorePrefixes(cfg) {
 
 export function gitStatusEntries(root) {
   try {
-    const out = spawnSync('git', ['-C', root, 'status', '--porcelain'], {
+    // -z:NUL 分隔且不做 quotepath 转义(非 ASCII 文件名原样输出);
+    // -uall:展开未跟踪目录内的具体文件(否则新目录只显示 "?? dir/" 而失明)
+    const out = spawnSync('git', ['-C', root, 'status', '--porcelain', '-uall', '-z'], {
       encoding: 'utf8', timeout: 10000, shell: false,
     });
     if (out.status !== 0 || out.error) return null;
+    const fields = (out.stdout ?? '').split('\0');
     const entries = [];
-    for (const line of out.stdout.split('\n')) {
-      if (line.length < 4) continue;
-      entries.push([line.slice(0, 2), line.slice(3).trim()]);
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      if (f.length < 4) continue;
+      const code = f.slice(0, 2);
+      entries.push([code, f.slice(3)]);
+      if (code[0] === 'R' || code[0] === 'C') i++; // -z 模式下一字段是 rename/copy 的旧路径
     }
     return entries;
   } catch {
@@ -409,7 +476,10 @@ export function countChars(s) {
 }
 
 export function checkCommitMsg(text, cfg) {
-  const lines = String(text).split('\n').filter((l) => !l.startsWith('#'));
+  // git commit -v 会在 scissors 线后附带整个 diff(git 提交时会截掉),
+  // 必须先截断,否则 diff 行喂饱正文长度、检查被静默绕过
+  const beforeScissors = String(text).split(/^[#;@!$%^&|:] -+ >8 -+/m)[0];
+  const lines = beforeScissors.split('\n').filter((l) => !l.startsWith('#'));
   const subject = (lines[0] ?? '').trim();
   const body = lines.slice(1).filter((l) => l.trim() !== '').join('\n');
   if (/^(Merge |Revert |fixup!|squash!|amend!)/.test(subject)) {
@@ -428,8 +498,9 @@ export function checkCommitMsg(text, cfg) {
 // ---------- 会话标记(防 Stop 死循环;放项目内 .state/,不落系统 tmp) ----------
 
 export function stopFlagPath(root, sessionId) {
-  const id = sessionId
+  let id = sessionId
     ? String(sessionId).replace(/[^A-Za-z0-9._-]/g, '_')
     : new Date().toISOString().slice(0, 10) + '-nosession';
+  if (id.length > 64) id = createHash('sha1').update(id).digest('hex'); // 超长 id 摘要,保证文件名可写
   return join(root, '.tidykeep', '.state', `stop-once-${id}`);
 }

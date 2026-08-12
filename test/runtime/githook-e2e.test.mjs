@@ -109,3 +109,23 @@ test('enable-githooks.mjs: 已有外部 hooksPath(husky)→ 不覆盖,打印接�
   assert.equal(git('config', 'core.hooksPath').stdout.trim(), '.husky');
   assert.ok(r.stdout.includes('.husky'), '应打印接入指引');
 });
+
+// ---------- 第二轮审查回归 ----------
+
+test('pre-commit: 非 ASCII 文件名(中文副本命名)不再因 core.quotepath 绕过', () => {
+  const { root, git } = makeRepo();
+  writeFileSync(join(root, '模型备份.py'), 'x');
+  writeFileSync(join(root, 'LEDGER.md'), '# 台账');
+  git('add', '-A');
+  const fail = commit({ root }, GOOD_MSG);
+  assert.notEqual(fail.status, 0, '中文副本命名应被拦截');
+  assert.ok((fail.stdout + fail.stderr).includes('历史副本命名'));
+});
+
+test('commit-msg: scissors 之后的 diff 不计入正文(git commit -v 场景)', () => {
+  const { root } = makeRepo();
+  const msgfile = join(root, 'MSG');
+  writeFileSync(msgfile, 'fix: 短\n\n# ------------------------ >8 ------------------------\ndiff --git a/x b/x\n+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n');
+  const r = spawnSync('node', [join(root, '.tidykeep', 'runtime', 'githook.mjs'), 'commit-msg', msgfile], { cwd: root, encoding: 'utf8' });
+  assert.equal(r.status, 1, 'diff 内容不得喂饱正文长度');
+});

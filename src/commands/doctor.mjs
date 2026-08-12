@@ -43,11 +43,17 @@ export function doctor(targetArg, opts = {}) {
     if (!existsSync(p)) { check(`githooks/${name} 存在`, false, '重跑 init 可修复'); continue; }
     const text = readFileSync(p, 'utf8');
     const crlf = text.includes('\r');
-    if (crlf && opts.fix) writeFileSync(p, text.replaceAll('\r\n', '\n'));
-    check(`githooks/${name} 为 LF`, !crlf || opts.fix, crlf ? (opts.fix ? '已修复' : '被 CRLF 污染(--fix 修复)') : '', true);
+    let crlfFixed = false;
+    if (crlf && opts.fix) {
+      try { writeFileSync(p, text.replaceAll('\r\n', '\n')); crlfFixed = true; } catch { /* 权限不足等,下方如实报告 */ }
+    }
+    check(`githooks/${name} 为 LF`, !crlf || crlfFixed, crlf ? (crlfFixed ? '已修复' : '被 CRLF 污染(--fix 修复)') : '', true);
     const exec = process.platform === 'win32' || Boolean(statSync(p).mode & 0o100);
-    if (!exec && opts.fix) chmodSync(p, 0o755);
-    check(`githooks/${name} 可执行`, exec || opts.fix, exec ? '' : (opts.fix ? '已修复' : '缺执行位(--fix 修复)'), true);
+    let execFixed = false;
+    if (!exec && opts.fix) {
+      try { chmodSync(p, 0o755); execFixed = true; } catch { /* 同上 */ }
+    }
+    check(`githooks/${name} 可执行`, exec || execFixed, exec ? '' : (execFixed ? '已修复' : '缺执行位(--fix 修复)'), true);
   }
 
   // 4. hooks JSON 条目健康(每个文件恰好一组我们的条目集,无重复)

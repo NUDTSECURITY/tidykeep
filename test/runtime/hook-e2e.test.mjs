@@ -1,7 +1,7 @@
 // 适配器端到端:以真实子进程执行 hook.mjs,灌 stdin fixture,断言输出与退出码。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,4 +188,49 @@ test('codex-stop warn 模式 → systemMessage(Codex Stop 官方不支持 additi
   const out = JSON.parse(r.stdout);
   assert.ok(out.systemMessage.includes('LEDGER'));
   assert.equal(out.hookSpecificOutput, undefined);
+});
+
+// ---------- 第二轮审查回归 ----------
+
+test('kimi: 只读工具带 path → 放行(不再按写入裁决)', () => {
+  const root = makeProject();
+  writeFileSync(join(root, 'legacy_old.py'), 'x');
+  const r1 = runHook(root, 'kimi-pretooluse', { tool_name: 'ReadFile', tool_input: { path: '/tmp/build.log' }, cwd: root });
+  assert.equal(r1.status, 0);
+  assert.equal(r1.stdout.trim(), '');
+  const r2 = runHook(root, 'kimi-pretooluse', { tool_name: 'ReadFile', tool_input: { path: join(root, 'legacy_old.py') }, cwd: root });
+  assert.equal(r2.status, 0);
+});
+
+test('claude-stop: 未跟踪目录内的新代码也触发台账检查(-uall)', () => {
+  const root = makeProject({ git: true });
+  writeFileSync(join(root, 'LEDGER.md'), '# 台账\n');
+  execFileSync('git', ['-C', root, 'add', '-A']);
+  execFileSync('git', ['-C', root, 'commit', '-qm', 'base commit fixture for untracked dir case']);
+  mkdirSync(join(root, 'newmod'), { recursive: true });
+  writeFileSync(join(root, 'newmod', 'mod.py'), 'x');
+  const r = runHook(root, 'claude-stop', { cwd: root, session_id: 'su' });
+  assert.equal(JSON.parse(r.stdout).decision, 'block');
+});
+
+test('claude-stop: 会话标记无法写入 → 降级 warn 而非反复 block', () => {
+  const root = dirtyRepo();
+  rmSync(join(root, '.tidykeep', '.state'), { recursive: true, force: true });
+  writeFileSync(join(root, '.tidykeep', '.state'), 'not a dir');
+  const r = runHook(root, 'claude-stop', { cwd: root, session_id: 'sf' });
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.decision, undefined);
+  assert.ok(out.hookSpecificOutput.additionalContext.includes('LEDGER'));
+});
+
+test('kimi-shim: vendored runtime 损坏 → 静默放行 exit 0,无堆栈泄露', () => {
+  const root = makeProject();
+  writeFileSync(join(root, '.tidykeep', 'runtime', 'hook.mjs'), 'syntax error(((');
+  const r = spawnSync('node', [join(RUNTIME_SRC, 'kimi-shim.mjs'), 'kimi-pretooluse'], {
+    input: JSON.stringify({ tool_name: 'WriteFile', tool_input: { path: '/tmp/x.sh' }, cwd: root }),
+    encoding: 'utf8',
+    cwd: root,
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stderr.trim(), '');
 });

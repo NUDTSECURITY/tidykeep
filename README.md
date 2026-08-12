@@ -152,8 +152,8 @@ hooks 与 settings.json 里的 python3 条目、转换安装清单,旧文件删�
 
 以下行为已按官方文档实现并通过自动化测试,但部分细节官方未记载,需在真实 agent 里验证:
 
-- [ ] Codex:`.codex/hooks.json` 相对路径 command 的进程 cwd;`apply_patch` 的 `tool_input` 实际形状;deny reason 回传完整度;项目级 hooks 首次生效有无信任确认。
-- [ ] Kimi:PreToolUse 附加字段确切名称(现为防御式解析);deny 经 exit 2 与 stdout JSON 哪个通道回传更完整;Stop 的输入字段;无 matcher 全量触发的性能观感。
+- [ ] Codex:`apply_patch` 的 `tool_input` 实际形状(字符串与数组均已支持,待确认);deny reason 回传完整度;项目级 hooks 首次生效有无信任确认;Windows 下 hook command 中 `$(git rev-parse --show-toplevel)` 的 shell 解析(POSIX 按官方推荐写法)。
+- [ ] Kimi:PreToolUse 附加字段确切名称(现为防御式解析:只读工具带 path 一律放行,写入类工具名正向门控);deny 经 exit 2 与 stdout JSON 哪个通道回传更完整;Stop 的输入字段;无 matcher 全量触发的性能观感。
 - [ ] Windows:Claude Code `PowerShell` 工具的 `tool_input` 字段名;GUI git 客户端 PATH 中 node 可见性。
 
 ## License

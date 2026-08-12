@@ -82,9 +82,10 @@ export function uninstall(targetArg, opts = {}) {
     try { rmdirSync(dir); } catch { /* 非空即保留 */ }
   }
 
-  // 4. git hooksPath(仅当是本工具设置时还原)
-  if (manifest.hookspath === 'set') {
-    const cur = git(target, 'config', 'core.hooksPath').stdout.trim();
+  // 4. git hooksPath:凡指向 .tidykeep/githooks 一律还原(即将删除该目录,
+  // 留着就是悬空配置,会静默禁用全部 git hooks;manifest 丢失也要能自愈)
+  {
+    const cur = (git(target, 'config', 'core.hooksPath').stdout ?? '').trim();
     if (cur === '.tidykeep/githooks') {
       git(target, 'config', '--unset', 'core.hooksPath');
       log('已还原 git core.hooksPath');

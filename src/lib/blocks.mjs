@@ -33,11 +33,12 @@ export const claudeHookGroups = () => ({
   Stop: [{ hooks: [claudeHandler('claude-stop', 'tidykeep: 收尾检查', 30)] }],
 });
 
-// Codex 项目级 .codex/hooks.json:command 为相对路径字符串
-// (hook 进程 cwd 是否恒为项目根待实机验证;runtime 入口自身还会用 payload.cwd 定位项目,双保险)
+// Codex 项目级 .codex/hooks.json:官方明确 hook 进程 cwd 是"会话目录"而非仓库根,
+// 且推荐 "$(git rev-parse --show-toplevel)/..." 形式解析 repo-local hooks——
+// 相对路径在子目录会话中会静默失效(Codex 对非 2 退出码 fail-open)。
 const codexHandler = (flavor, timeout = 20) => ({
   type: 'command',
-  command: `node .tidykeep/runtime/hook.mjs ${flavor}`,
+  command: `node "$(git rev-parse --show-toplevel)/.tidykeep/runtime/hook.mjs" ${flavor}`,
   timeout,
 });
 

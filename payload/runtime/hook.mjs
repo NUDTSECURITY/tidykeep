@@ -83,6 +83,11 @@ function handlePreToolUse(agent, payload, ctx) {
   const command = typeof input.command === 'string' ? input.command : null;
 
   if (filePath) {
+    // 正向门控:只有名字表明"会写文件"的工具才做写入裁决。Kimi 层无 matcher、
+    // 事件全量进入,只读工具(ReadFile/Grep/Glob…)带 path 字段是常态,
+    // 不得按写入拒绝(对齐基线"仅 Write 检查"的语义)。
+    const WRITE_TOOL_RE = /write|edit|create|save|notebook|patch|append|new/i;
+    if (!WRITE_TOOL_RE.test(toolName)) return;
     // Edit 类工具改的是已存在的文件 → 放行,避免"合法历史遗留文件无法编辑"的自锁;
     // 目标不存在(即新建)才做命名/路径检查。Write 是整文件覆写,始终检查。
     const editLike = /edit/i.test(toolName) && !/^write/i.test(toolName);
@@ -93,7 +98,7 @@ function handlePreToolUse(agent, payload, ctx) {
   }
 
   if (command) {
-    const v = core.scanBashCommand(command, ctx);
+    const v = core.scanBashCommand(command, ctx, { powershell: /powershell|pwsh/i.test(toolName) });
     if (v.decision === 'deny') emitDeny(agent, msg.denyReason('bash', v));
   }
 }
@@ -142,7 +147,12 @@ function handleStop(agent, payload, ctx) {
     try {
       mkdirSync(dirname(flag), { recursive: true });
       writeFileSync(flag, '1');
-    } catch { /* 标记写失败时宁可少拦一次,不重复骚扰 */ }
+    } catch {
+      // 标记写不进去就无法保证"每会话只强制一次",block 会变成反复骚扰
+      // (Kimi 无官方防死循环信号时甚至收不了工)——降级为 warn
+      emitStopWarn(agent, reason);
+      return;
+    }
     emitStopBlock(agent, reason);
   } else {
     emitStopWarn(agent, reason);

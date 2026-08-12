@@ -12,9 +12,11 @@ function git(root, ...args) {
 }
 
 function stagedPaths(root, extra = []) {
-  const r = git(root, 'diff', '--cached', '--name-only', ...extra);
+  // -z:NUL 分隔且无 quotepath 转义——否则非 ASCII 文件名被输出成
+  // C 风格八进制转义串,命名与台账检查整体被绕过
+  const r = git(root, 'diff', '--cached', '--name-only', '-z', ...extra);
   if (r.status !== 0) return [];
-  return r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+  return (r.stdout ?? '').split('\0').filter(Boolean);
 }
 
 function main() {

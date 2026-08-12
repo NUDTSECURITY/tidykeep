@@ -27,11 +27,16 @@ try {
     dir = parent;
   }
   if (hookPath) {
-    const r = spawnSync(process.execPath, [hookPath, flavor], {
-      input,
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
-    process.exit(r.status ?? 0);
+    const r = spawnSync(process.execPath, [hookPath, flavor], { input, encoding: 'utf8' });
+    // 只转发契约内的结果(0=放行/警示,2=阻断);runtime 损坏等其他退出码
+    // 一律静默放行,不向 agent 泄露 Node 堆栈
+    if (r.status === 2) {
+      if (r.stdout) process.stdout.write(r.stdout);
+      if (r.stderr) process.stderr.write(r.stderr);
+      process.exit(2);
+    }
+    if (r.status === 0 && r.stdout) process.stdout.write(r.stdout);
+    process.exit(0);
   }
 } catch { /* shim 自身故障一律放行 */ }
 process.exit(0);

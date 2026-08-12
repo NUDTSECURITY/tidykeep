@@ -20,7 +20,7 @@ import {
   claudeHookGroups, codexHookGroups,
 } from '../lib/blocks.mjs';
 import { installKimiGlobal } from '../lib/kimi.mjs';
-import { parseLegacyConfig, DEFAULT_CONFIG } from '../../payload/runtime/core.mjs';
+import { parseLegacyConfig, loadConfig, DEFAULT_CONFIG } from '../../payload/runtime/core.mjs';
 
 const PAYLOAD = fileURLToPath(new URL('../../payload/', import.meta.url));
 
@@ -89,6 +89,15 @@ export function init(targetArg, opts = {}) {
   cpSync(join(PAYLOAD, 'githooks'), join(tk, 'githooks'), { recursive: true });
   mkdirSync(join(tk, 'docs'), { recursive: true });
   copyFileSync(join(PAYLOAD, 'docs', 'workflows.md'), join(tk, 'docs', 'workflows.md'));
+  // 包自身若经 git 在 Windows 上检出,autocrlf 可能已把脚本改成 CRLF
+  // (sh 遇 \r 报错)——落地时统一归一为 LF
+  for (const dir of [join(tk, 'runtime'), join(tk, 'githooks')]) {
+    for (const f of readdirSync(dir)) {
+      const p = join(dir, f);
+      const text = readFileSync(p, 'utf8');
+      if (text.includes('\r')) writeFileSync(p, text.replaceAll('\r\n', '\n'));
+    }
+  }
   chmodAll(join(tk, 'githooks'));
   chmodAll(join(tk, 'runtime'));
 
@@ -109,7 +118,9 @@ export function init(targetArg, opts = {}) {
   }
   if (legacyCfg) unlinkSync(legacyConfigPath);
   if (!existsSync(join(tk, 'allowlist'))) copyFileSync(join(PAYLOAD, 'allowlist'), join(tk, 'allowlist'));
-  const scratch = (opts.scratchDir ?? legacyCfg?.SCRATCH_DIR ?? '.tmp').replace(/^\/+|\/+$/g, '');
+  // 生效草稿区名以 config.jsonc 为准(重跑 init 不得把自定义 SCRATCH_DIR 重置回 .tmp)
+  const scratch = (opts.scratchDir ?? legacyCfg?.SCRATCH_DIR ?? loadConfig(target).SCRATCH_DIR ?? '.tmp')
+    .replace(/^\/+|\/+$/g, '');
 
   // 标记不成对(误删/merge 冲突)时拒绝改写,避免吞掉用户内容
   const upsertRecorded = (rel, begin, end, content) => {
@@ -143,7 +154,10 @@ export function init(targetArg, opts = {}) {
     upsertRecorded('CLAUDE.md', MD_BEGIN, MD_END, CLAUDE_POINTER);
     const settingsPath = join(target, '.claude', 'settings.json');
     const before = existsSync(settingsPath) ? readFileSync(settingsPath, 'utf8') : undefined;
-    if (before !== undefined && !existsSync(join(tk, 'backup', 'settings.json.bak'))) {
+    // 只备份"接入前的原始文件":本工具创建/改写过的(manifest 有记录)不再备份,
+    // 否则重跑 init 会把工具生成物当成"用户原件"误导恢复
+    if (before !== undefined && !existsSync(join(tk, 'backup', 'settings.json.bak'))
+        && !('.claude/settings.json' in manifest.files)) {
       writeFileSync(join(tk, 'backup', 'settings.json.bak'), before);
     }
     const merged = mergeSettingsText(before, claudeHookGroups());
@@ -163,7 +177,8 @@ export function init(targetArg, opts = {}) {
   if (agents.has('codex')) {
     const codexPath = join(target, '.codex', 'hooks.json');
     const before = existsSync(codexPath) ? readFileSync(codexPath, 'utf8') : undefined;
-    if (before !== undefined && !existsSync(join(tk, 'backup', 'codex-hooks.json.bak'))) {
+    if (before !== undefined && !existsSync(join(tk, 'backup', 'codex-hooks.json.bak'))
+        && !('.codex/hooks.json' in manifest.files)) {
       writeFileSync(join(tk, 'backup', 'codex-hooks.json.bak'), before);
     }
     const merged = mergeSettingsText(before, codexHookGroups());

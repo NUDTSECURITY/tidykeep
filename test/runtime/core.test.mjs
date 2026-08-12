@@ -8,7 +8,7 @@ import {
   toPosix, normalizePath, inProject, systemTmpPrefixes,
   classifyWritePath, visibleShellLines, scanBashCommand,
   ledgerSyncCheck, scratchLeftovers, checkStagedNames, stagedLedgerSync,
-  checkCommitMsg, countChars, parseApplyPatch,
+  checkCommitMsg, countChars, parseApplyPatch, stopFlagPath,
 } from '../../payload/runtime/core.mjs';
 
 const ROOT = '/proj';
@@ -222,4 +222,64 @@ test('loadAllowlist: 跳过注释与空行', () => {
   mkdirSync(join(d, '.tidykeep'), { recursive: true });
   writeFileSync(join(d, '.tidykeep', 'allowlist'), '# 注释\n\ndocs/data_v2.json\n');
   assert.deepEqual([...loadAllowlist(d)], ['docs/data_v2.json']);
+});
+
+// ---------- 第二轮对抗审查确认缺陷的回归测试 ----------
+
+test('bash 模式下行尾 @" 不触发 here-string 剥离(否则整段扫描被绕过)', () => {
+  const cmd = 'echo "ping admin@"\necho secret > /tmp/leak.txt';
+  const r = scanBashCommand(cmd, ctx());
+  assert.equal(r.decision, 'deny');
+  assert.equal(r.kind, 'system-tmp');
+});
+
+test('powershell 模式下 here-string 正文被剥离', () => {
+  const cmd = '$x = @"\n/tmp/fake.txt inside herestring\n"@\nWrite-Host done';
+  const v = visibleShellLines(cmd, { powershell: true });
+  assert.ok(!v.includes('fake.txt'));
+  const r = scanBashCommand('$x = @"\ncp a /tmp/fake.txt\n"@\nNew-Item real.txt', ctx(), { powershell: true });
+  assert.equal(r.decision, 'allow');
+});
+
+test('file_path 带尾随换行不再绕过命名守卫(python $ 语义对齐)', () => {
+  assert.equal(classifyWritePath('/proj/train_v2.py\n', ctx()).decision, 'deny');
+});
+
+test('POSIX 上 /TMP 大小写不同不误判为系统 tmp;win32 平台仍不区分大小写', () => {
+  assert.equal(classifyWritePath('/TMP/x.sh', ctx()).decision, 'allow');
+  const winCtx = ctx({ root: 'C:/proj', opts: { platform: 'win32', homedir: 'C:/Users/u', tmpdir: 'C:\\Users\\u\\AppData\\Local\\Temp' } });
+  assert.equal(classifyWritePath('C:\\USERS\\U\\APPDATA\\LOCAL\\TEMP\\x.py', winCtx).decision, 'deny');
+});
+
+test('win32 下项目内前缀与 allowlist 比较不区分大小写', () => {
+  const winCtx = ctx({ root: 'C:/proj', allow: new Set(['docs/data_v2.json']), opts: { platform: 'win32', homedir: 'C:/Users/u' } });
+  assert.equal(classifyWritePath('C:/proj/.TMP/x_old.py', winCtx).decision, 'allow');
+  assert.equal(classifyWritePath('C:/proj/DOCS/DATA_V2.JSON', winCtx).decision, 'allow');
+});
+
+test('UNC 路径保留 // 前缀,项目内判断正确', () => {
+  assert.equal(normalizePath('\\\\server\\share\\proj\\a.py', '/x'), '//server/share/proj/a.py');
+  const c = ctx({ root: '\\\\server\\share\\proj' });
+  assert.equal(classifyWritePath('\\\\server\\share\\proj\\.tmp\\x_old.py', c).decision, 'allow');
+});
+
+test('~otheruser 路径按项目外处理(对齐基线 expanduser 放行语义)', () => {
+  assert.equal(classifyWritePath('~bob/x_old.py', ctx({ opts: { homedir: '/home/u' } })).decision, 'allow');
+});
+
+test('checkCommitMsg: scissors(git commit -v)之后的 diff 不计入正文长度', () => {
+  const c = cfg();
+  const msg = 'fix: 短\n\n# ------------------------ >8 ------------------------\ndiff --git a/x b/x\n+'.padEnd(400, 'x');
+  assert.equal(checkCommitMsg(msg, c).ok, false);
+});
+
+test('scanBashCommand 方向敏感:cp 以 /tmp 为源、项目为目标 → 放行;反向 → 拦截', () => {
+  assert.equal(scanBashCommand('cp /tmp/data.csv ./data.csv', ctx()).decision, 'allow');
+  const r = scanBashCommand('cp a.py /tmp/b.py', ctx());
+  assert.equal(r.kind, 'system-tmp');
+});
+
+test('stopFlagPath: 超长 session id 被摘要,文件名可写', () => {
+  const p = stopFlagPath('/proj', 'x'.repeat(500));
+  assert.ok(p.split('/').pop().length < 120);
 });

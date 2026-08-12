@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, symlinkSync,
+  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, symlinkSync, rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -240,4 +240,40 @@ test('Kimi 引用计数:symlink 路径 init、真实路径 uninstall 视为同�
   assert.equal(run(['uninstall', root], env).status, 0);
   assert.equal(readFileSync(join(kimiHome, 'config.toml'), 'utf8').includes('[[hooks]]'), false,
     'symlink 与真实路径应归一,最后一个项目卸载后全局块移除');
+});
+
+test('codex hooks 命令基于 git 根解析(官方:hook cwd 是会话目录而非仓库根)', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  run(['init', root], env);
+  const codex = readFileSync(join(root, '.codex', 'hooks.json'), 'utf8');
+  assert.ok(codex.includes('git rev-parse --show-toplevel'));
+});
+
+test('重跑 init 不重置自定义草稿区的 .gitignore 条目', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  run(['init', root, '--scratch-dir', '.scratch'], env);
+  run(['init', root], env);
+  const gi = readFileSync(join(root, '.gitignore'), 'utf8');
+  assert.ok(gi.includes('.scratch/'), '自定义草稿区条目应保留');
+  assert.ok(!gi.includes('\n.tmp/'), '不应被重置回默认 .tmp/');
+});
+
+test('首次 init 自建的 settings.json 不会在重跑时被当作"原始备份"', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  run(['init', root], env);
+  run(['init', root], env);
+  assert.equal(existsSync(join(root, '.tidykeep', 'backup', 'settings.json.bak')), false);
+});
+
+test('manifest 丢失时 uninstall 仍还原指向 .tidykeep/githooks 的 hooksPath', () => {
+  const { env } = makeEnvHome();
+  const root = makeRepo();
+  run(['init', root], env);
+  rmSync(join(root, '.tidykeep', 'manifest.json'), { force: true });
+  run(['uninstall', root], env);
+  const hp = spawnSync('git', ['-C', root, 'config', 'core.hooksPath'], { encoding: 'utf8' });
+  assert.equal((hp.stdout ?? '').trim(), '');
 });
