@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# tidykeep pre-commit：对所有 Agent 与人类生效的通用强制层。
+# 检查 1：新增/重命名的文件不得使用历史副本命名（_v2/_old/_final/copy/副本…）。
+# 检查 2：提交涉及代码/文档时，LEDGER.md 或 STATE.md 必须一并更新（ENFORCE_LEDGER=block 时）。
+# 跳过：TIDYKEEP_SKIP=1 git commit ...（须向协作者说明原因）。
+set -u
+
+[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+# 读取配置（缺省值兜底）
+GUARD="on"; ENFORCE_LEDGER="block"; SCRATCH_DIR=".tmp"
+CODE_EXTS="py js ts tsx jsx mjs cjs go rs java rb php c cc cpp h hpp cs swift kt scala sql sh bash zsh vue svelte ipynb"
+DOC_EXTS="md rst txt adoc"
+STALE_ERE='([_. -](v[0-9]+|old|new|final|finalfinal|backup|bak|copy[0-9]*|dup|tmp|temp|deprecated|legacy|orig)[_. -]*|\([0-9]+\)|副本|旧版|备份)\.[A-Za-z0-9]+$'
+[ -f "$root/.tidykeep/config" ] && . "$root/.tidykeep/config"
+
+# 若本 hook 接管前项目已有本地 pre-commit，则先链式执行它
+legacy="$root/.git/hooks/pre-commit"
+if [ -x "$legacy" ] && [ "$(git config core.hooksPath 2>/dev/null)" = ".tidykeep/githooks" ]; then
+    "$legacy" "$@" || exit $?
+fi
+
+allowfile="$root/.tidykeep/allowlist"
+
+in_allowlist() {
+    [ -f "$allowfile" ] && grep -qxF "$1" "$allowfile"
+}
+
+# ---------- 检查 1：垃圾命名 ----------
+if [ "$GUARD" = "on" ]; then
+    bad=""
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        case "$f" in "$SCRATCH_DIR"/*|.tidykeep/*) continue ;; esac
+        in_allowlist "$f" && continue
+        base=${f##*/}
+        if printf '%s\n' "$base" | grep -qiE "$STALE_ERE"; then
+            bad="${bad}  ${f}
+"
+        fi
+    done <<EOF
+$(git diff --cached --name-only --diff-filter=ACR)
+EOF
+    if [ -n "$bad" ]; then
+        printf '\n[tidykeep] 提交被拒绝：以下文件命中历史副本命名模式：\n%s' "$bad"
+        printf '按协议处理：直接修改原文件（历史由 git 保管）；参数差异用 CLI/配置解决；\n'
+        printf '一次性实验放 %s/；误报请把精确路径加入 .tidykeep/allowlist。\n' "$SCRATCH_DIR"
+        printf '确需强行提交：TIDYKEEP_SKIP=1 git commit ...\n\n'
+        exit 1
+    fi
+fi
+
+# ---------- 检查 2：台账同步 ----------
+if [ "$ENFORCE_LEDGER" != "off" ]; then
+    exts=" $CODE_EXTS $DOC_EXTS "
+    work_hit=0; ledger_hit=0
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        base=${f##*/}
+        case "$base" in LEDGER.md|STATE.md) ledger_hit=1; continue ;; esac
+        case "$base" in AGENTS.md|CLAUDE.md|GEMINI.md) continue ;; esac
+        case "$f" in "$SCRATCH_DIR"/*|.tidykeep/*|.claude/*) continue ;; esac
+        ext=${base##*.}
+        [ "$ext" = "$base" ] && continue
+        case "$exts" in *" $ext "*) work_hit=1 ;; esac
+    done <<EOF
+$(git diff --cached --name-only)
+EOF
+    if [ "$work_hit" = "1" ] && [ "$ledger_hit" = "0" ]; then
+        if [ "$ENFORCE_LEDGER" = "block" ]; then
+            printf '\n[tidykeep] 提交被拒绝：本次提交改动了代码/文档，但 LEDGER.md / STATE.md 未同步。\n'
+            printf '请先完成收尾：LEDGER.md 完成项移入 DONE（附日期）、登记新 TODO；\n'
+            printf '设计有变则更新 STATE.md 并把旧决策标 superseded。\n'
+            printf '纯琐碎改动可 TIDYKEEP_SKIP=1 git commit ... 跳过（须说明原因）。\n\n'
+            exit 1
+        else
+            printf '[tidykeep] 提醒：LEDGER.md / STATE.md 未随本次改动更新，请确认是否遗漏。\n'
+        fi
+    fi
+fi
+
+exit 0

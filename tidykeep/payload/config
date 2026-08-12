@@ -1,0 +1,30 @@
+# tidykeep 配置（bash 可 source / python 可解析的 KEY="VALUE" 格式）
+# 修改后立即生效，无需重装。
+
+# 文件命名守卫：on / off（Claude Code PreToolUse + git pre-commit 共用）
+GUARD="on"
+
+# 台账同步强制等级：block（阻止收工/提交）/ warn（仅提醒）/ off
+ENFORCE_LEDGER="block"
+
+# 被视为"代码/文档改动"、从而要求同步台账的扩展名（空格分隔）
+CODE_EXTS="py js ts tsx jsx mjs cjs go rs java rb php c cc cpp h hpp cs swift kt scala sql sh bash zsh vue svelte ipynb"
+DOC_EXTS="md rst txt adoc"
+
+# 历史副本命名模式（POSIX ERE；bash 用 grep -iE，python 用 re.IGNORECASE）
+# 命中示例：train_v2.py / a_old.ts / b-final.go / c_backup.sh / d copy.py / e(1).md / 旧版f.py / g副本.md
+STALE_ERE="([_. -](v[0-9]+|old|new|final|finalfinal|backup|bak|copy[0-9]*|dup|tmp|temp|deprecated|legacy|orig)[_. -]*|\([0-9]+\)|副本|旧版|备份)\.[A-Za-z0-9]+$"
+
+# 草稿区目录名（项目内、已 gitignore；一次性/验证脚本专用，守卫不检查此目录内部）
+SCRATCH_DIR=".tmp"
+
+# 禁止在系统临时目录（/tmp、/var/tmp、~/tmp、~/.tmp、$TMPDIR、/dev/shm）创建文件，
+# 强制改用项目内 SCRATCH_DIR：on / off
+FORBID_SYSTEM_TMP="on"
+
+# 收尾时检查 SCRATCH_DIR 是否有残留文件并要求清理或说明：on / off
+CHECK_TMP_LEFTOVER="on"
+
+# commit-msg 最小长度（按字符计，中英文同权）
+MIN_SUBJECT="10"
+MIN_BODY="20"

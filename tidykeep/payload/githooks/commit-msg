@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# tidykeep commit-msg：强制详细提交信息。
+# 规则：主题行 >= MIN_SUBJECT 字符；正文（空行之后）合计 >= MIN_BODY 字符。
+# 豁免：Merge / Revert / fixup! / squash! / amend!；或 TIDYKEEP_SKIP=1。
+set -u
+
+[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
+msgfile="$1"
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || root="."
+MIN_SUBJECT="10"; MIN_BODY="20"
+[ -f "$root/.tidykeep/config" ] && . "$root/.tidykeep/config"
+
+# 链式执行接管前的本地 commit-msg
+legacy="$root/.git/hooks/commit-msg"
+if [ -x "$legacy" ] && [ "$(git config core.hooksPath 2>/dev/null)" = ".tidykeep/githooks" ]; then
+    "$legacy" "$@" || exit $?
+fi
+
+# 去掉注释行后取内容
+content=$(grep -v '^#' "$msgfile" || true)
+subject=$(printf '%s\n' "$content" | sed -n '1p')
+body=$(printf '%s\n' "$content" | sed '1d' | sed '/^[[:space:]]*$/d')
+
+case "$subject" in
+    Merge\ *|Revert\ *|fixup!*|squash!*|amend!*) exit 0 ;;
+esac
+
+# 字符数统计：优先 python3（中英文同权），退化为 wc -m
+charlen() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s' "$1" | python3 -c 'import sys;print(len(sys.stdin.buffer.read().decode("utf-8","ignore").strip()))'
+    else
+        printf '%s' "$1" | wc -m | tr -d ' '
+    fi
+}
+
+slen=$(charlen "$subject")
+blen=$(charlen "$body")
+
+fail=0
+[ "$slen" -lt "$MIN_SUBJECT" ] && fail=1
+[ "$blen" -lt "$MIN_BODY" ] && fail=1
+
+if [ "$fail" = "1" ]; then
+    cat >&2 <<TPL
+
+[tidykeep] 提交信息不符合规范（主题 ${slen}/${MIN_SUBJECT} 字符，正文 ${blen}/${MIN_BODY} 字符）。
+请按模板补全后重试：
+
+  <type>: <一句话说清做了什么>
+
+  为什么: <动机 / 修复的问题 / 对应的 TODO>
+  影响: <涉及的模块与文件；LEDGER/STATE 相应更新点>
+
+type ∈ feat / fix / refactor / docs / chore / test / perf。
+确属琐碎改动可 TIDYKEEP_SKIP=1 git commit ...（须说明原因）。
+
+TPL
+    exit 1
+fi
+
+exit 0
