@@ -163,7 +163,8 @@
 - 最后核对: 2026-08-12
 - TODO:
 - DONE:
-  - [x] 2026-08-12 AGENTS.md 协议块(≤3KiB 守 Codex/Kimi 32KiB 预算),任务循环+Commit 规范+指路行
+  - [x] 2026-08-12 AGENTS.md 协议块(精简守 Codex/Kimi 32KiB 预算),任务循环+Commit 规范+指路行
+  - [x] 2026-08-12 新增"对外动作边界":agent 到 commit 为止,push/发布由人决定;发布前强制体检审计(D-009)
 
 ## payload/docs/workflows.md
 
