@@ -8,6 +8,7 @@ import {
   rmSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { upsertBlockFile } from '../lib/markers.mjs';
 import { loadManifest, saveManifest, recordFile } from '../lib/manifest.mjs';
@@ -21,7 +22,7 @@ import {
 import { installKimiGlobal } from '../lib/kimi.mjs';
 import { parseLegacyConfig, DEFAULT_CONFIG } from '../../payload/runtime/core.mjs';
 
-const PAYLOAD = new URL('../../payload/', import.meta.url).pathname;
+const PAYLOAD = fileURLToPath(new URL('../../payload/', import.meta.url));
 
 function pkgVersion() {
   try {

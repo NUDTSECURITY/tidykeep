@@ -16,7 +16,8 @@ const HELP = `tidykeep — 跨 Agent 的项目知识保鲜工具(Claude Code / C
       --dry-run                        只打印动作
   npx tidykeep uninstall [dir]         卸载(标记块精确回滚)
       --purge                          连 STATE.md / LEDGER.md 一并移除
-  npx tidykeep status [dir] [--json]   安装状态体检
+  npx tidykeep status [dir] [--json]   安装状态速览
+  npx tidykeep doctor [dir] [--fix]    深度体检(执行位/EOL/条目/探针;--fix 修安全项)
   npx tidykeep enable-githooks [dir]   启用 git hooks(团队成员克隆后一次)
 `;
 
@@ -29,6 +30,7 @@ const { values, positionals } = parseArgs({
     'no-git-hooks': { type: 'boolean', default: false },
     purge: { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
+    fix: { type: 'boolean', default: false },
     'dry-run': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
     version: { type: 'boolean', short: 'v', default: false },
@@ -68,6 +70,11 @@ switch (cmd) {
   case 'status': {
     const { status } = await import('../src/commands/status.mjs');
     code = status(dirArg, { json: values.json });
+    break;
+  }
+  case 'doctor': {
+    const { doctor } = await import('../src/commands/doctor.mjs');
+    code = doctor(dirArg, { fix: values.fix });
     break;
   }
   case 'enable-githooks': {
