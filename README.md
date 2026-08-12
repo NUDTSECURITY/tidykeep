@@ -42,6 +42,9 @@ Codex 与 Kimi Code 原生读取项目根的 AGENTS.md;Claude Code 只读 CLAUDE
 
 ## 安装 / 卸载(需要 Node.js ≥ 20.11)
 
+> 尚未发布到 npm registry。发布前请克隆本仓库后用 `node <仓库路径>/bin/tidykeep.mjs` 代替
+> 下文的 `npx tidykeep`,命令与参数完全相同;发布后即可直接 `npx`。
+
 ```bash
 npx tidykeep init                    # 安装到当前项目(幂等,重跑即升级)
 npx tidykeep init /path/to/project   # 指定目标项目
@@ -155,13 +158,16 @@ pre-commit / commit-msg 校验),适合无人值守场景。
 **旧 bash 版(install.sh)装过的项目?** 直接 `npx tidykeep init`:自动迁移配置值、替换 python
 hooks 与 settings.json 里的 python3 条目、转换安装清单,旧文件删除(历史在 git)。
 
-## 实机验证清单(发布前逐项打钩)
+## 已知边界(v0.1.0)
 
-以下行为已按官方文档实现并通过自动化测试,但部分细节官方未记载,需在真实 agent 里验证:
+如实告知当前版本的能力边界(全部行为已按官方文档实现并通过 120 项自动化测试,
+但以下细节官方文档未记载,在真实 agent 中的表现可能与预期有差异):
 
-- [ ] Codex:`apply_patch` 的 `tool_input` 实际形状(字符串与数组均已支持,待确认);deny reason 回传完整度;项目级 hooks 首次生效有无信任确认;Windows 下 hook command 中 `$(git rev-parse --show-toplevel)` 的 shell 解析(POSIX 按官方推荐写法)。
-- [ ] Kimi:PreToolUse 附加字段确切名称(现为防御式解析:只读工具带 path 一律放行,写入类工具名正向门控);deny 经 exit 2 与 stdout JSON 哪个通道回传更完整;Stop 的输入字段;无 matcher 全量触发的性能观感。
-- [ ] Windows:Claude Code `PowerShell` 工具的 `tool_input` 字段名;GUI git 客户端 PATH 中 node 可见性。
+- **Codex**:`apply_patch` 输入的字符串与数组两种形态均已支持,以实机为准;项目级 hooks 首次生效可能有信任确认交互。
+- **Kimi**:PreToolUse 字段名采用防御式解析(只读工具带 path 一律放行、写入类工具名正向门控),识别不了的工具会放行而不是误拦;hooks 无 matcher、全量触发,极端高频操作下有进程开销。
+- **Windows**:git hooks 依赖 Git for Windows 自带的 sh;GUI git 客户端的 PATH 里没有 node 时,git 层检查会降级放行并告警。
+
+逐项的实机验证跟踪在 `LEDGER.md` 对应文件的 TODO 里(这是本工具自己的协议:可执行的待办住台账,不住 README)。
 
 ## License
 

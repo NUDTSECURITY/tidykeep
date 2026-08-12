@@ -260,10 +260,13 @@
 
 - 最后核对: 2026-08-12
 - TODO:
-  - [ ] npm publish 后补安装徽章与 registry 链接
-  - [ ] 实机验证清单逐项打钩(Codex/Kimi/Windows)
+  - [ ] npm publish 后:补安装徽章与 registry 链接,删除"尚未发布"提示行
+  - [ ] 实机验证 Codex:apply_patch tool_input 实际形状、deny reason 回传完整度、项目级 hooks 首次信任确认、Windows 下 $(git rev-parse) 解析
+  - [ ] 实机验证 Kimi:PreToolUse 字段确切名称(验证后收紧防御式解析并加 matcher)、deny 双通道哪个回传更完整、Stop 输入字段
+  - [ ] 实机验证 Windows:PowerShell 工具 tool_input 字段名、GUI git 客户端 PATH 中 node 可见性
 - DONE:
   - [x] 2026-08-12 按官方核查结论重写(修正初稿 Kimi 两处错误断言),单一来源
+  - [x] 2026-08-12 体检审计(用户指出):维护者向"发布前 TODO 清单"移出 README 改为"已知边界"表述,可执行待办迁入本台账;补"未发布前从源码调用"说明
 
 ## AGENTS.md
 
