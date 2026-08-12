@@ -4,6 +4,6 @@ export { parseJsonc } from '../../payload/runtime/core.mjs';
 
 export function replaceJsoncValue(text, key, value) {
   const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`("${esc}"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*"|true|false|-?\\d+(?:\\.\\d+)?)`);
+  const re = new RegExp(`("${esc}"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*"|\\[[^\\]]*\\]|true|false|-?\\d+(?:\\.\\d+)?)`);
   return text.replace(re, (_m, p1) => p1 + JSON.stringify(value));
 }
