@@ -1,6 +1,9 @@
 node_modules/
 *.tgz
 .deepeval/
+
+# >>> tidykeep >>>
 .tmp/
-.tidykeep/.state/
 .tidykeep/backup/
+.tidykeep/.state/
+# <<< tidykeep <<<

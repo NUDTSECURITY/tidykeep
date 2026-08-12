@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.tidykeep/runtime/hook.mjs\" codex-pretooluse",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.tidykeep/runtime/hook.mjs\" codex-pretooluse",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.tidykeep/runtime/hook.mjs\" codex-stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

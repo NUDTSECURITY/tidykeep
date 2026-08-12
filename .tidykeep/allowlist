@@ -1,0 +1,4 @@
+# tidykeep 免检清单:每行一个"相对项目根目录的精确路径",命中者不做命名拦截。
+# 示例:
+# docs/whats_new.md
+# tests/fixtures/data_v2.json

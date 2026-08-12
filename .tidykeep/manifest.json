@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 2,
+  "toolVersion": "0.1.0",
+  "runtimeVersion": "0.1.0",
+  "installedAt": "2026-08-12T16:54:08.329Z",
+  "agents": [
+    "claude",
+    "codex",
+    "kimi"
+  ],
+  "files": {
+    "AGENTS.md": "created",
+    "STATE.md": "created",
+    "LEDGER.md": "created",
+    ".gitignore": "modified",
+    ".gitattributes": "created",
+    "CLAUDE.md": "created",
+    ".claude/settings.json": "created",
+    ".codex/hooks.json": "created"
+  },
+  "hookspath": "set",
+  "kimi": {
+    "status": "installed",
+    "configToml": "/home/fanzhenye/.kimi-code/config.toml"
+  },
+  "backups": []
+}

@@ -1,0 +1,4 @@
+# >>> tidykeep >>>
+.tidykeep/githooks/* text eol=lf
+.tidykeep/runtime/* text eol=lf
+# <<< tidykeep <<<

@@ -1,0 +1,13 @@
+#!/bin/sh
+# tidykeep git hook shim(由 `npx tidykeep init` 管理;检查逻辑在 .tidykeep/runtime/githook.mjs)
+[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+legacy="$root/.git/hooks/commit-msg"
+if [ -f "$legacy" ] && [ "$(git config core.hooksPath 2>/dev/null)" = ".tidykeep/githooks" ]; then
+  sh "$legacy" "$@" || exit $?
+fi
+if command -v node >/dev/null 2>&1; then
+  exec node "$root/.tidykeep/runtime/githook.mjs" commit-msg "$@"
+fi
+echo "[tidykeep] 警告: 未找到 node,跳过 tidykeep 检查(guardrail 降级放行)" >&2
+exit 0
