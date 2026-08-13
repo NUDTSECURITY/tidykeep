@@ -39,9 +39,43 @@ export function msgCommitRemind() {
 }
 
 export function msgLedgerSync() {
-  return '源码/文档已改动,但 LEDGER.md / STATE.md 未同步——请把本次完成项移入'
-    + ' LEDGER.md 的 DONE(附今天日期)、登记新 TODO、刷新『最后核对』;'
-    + '设计有变化则更新 STATE.md 并把被取代的决策标记 superseded,删除的文件登记进墓地。';
+  return '受管文件已改动,但 LEDGER.md 缺少可验证的逐文件收尾证据——请把本次完成项移入'
+    + '对应 section 的 DONE(附今天日期)、登记新 TODO、刷新『最后核对』;删除文件须移除对应 section。';
+}
+
+function displayFactPath(value, limit = 240) {
+  const chars = [...String(value ?? '')];
+  const clipped = chars.length > limit ? `${chars.slice(0, limit - 1).join('')}…` : chars.join('');
+  // Git 路径属于仓库输入；JSON 引号可见地转义换行/控制字符，避免路径伪装成 Hook 指令。
+  return JSON.stringify(clipped);
+}
+
+export function msgSemanticReview(facts) {
+  const action = {
+    added: '新增', modified: '修改', deleted: '删除', renamed: '重命名', copied: '复制',
+  };
+  const kind = { code: '代码', doc: '文档', watched: '关键文件' };
+  const shown = (facts.changes ?? [])
+    .map((item) => `${action[item.action] ?? item.action}/${kind[item.kind] ?? item.kind}:${displayFactPath(item.path)}`)
+    .join('、');
+  const omitted = facts.omitted ? `、另有 ${facts.omitted} 项未展开` : '';
+  const hints = [];
+  if ((facts.counts?.deleted ?? 0) > 0 || (facts.counts?.renamed ?? 0) > 0) {
+    hints.push('存在删除/重命名:核对替代关系、LEDGER 旧 section 与 STATE 墓地');
+  }
+  if ((facts.counts?.code ?? 0) > 0 && (facts.counts?.doc ?? 0) === 0) {
+    hints.push('代码变化但无普通文档变化:必须核对 README/docs 是否漂移,不等于强制改文档');
+  }
+  if ((facts.counts?.watched ?? 0) > 0) {
+    hints.push('关键文件变化:核对接口、配置、构建或交付约定是否改变');
+  }
+  if (!facts.stateChanged) hints.push('STATE.md 未变化:请判断这是正确结论还是遗漏');
+
+  return `检测到 ${facts.total} 个受管变化。必须调用 tidykeep Skill($tidykeep),执行工作流 2「收尾同步」并基于实际 diff 做语义判断,不要只机械修改台账。`
+    + `变更事实:${shown || '(无可展示路径)'}${omitted}。`
+    + `请逐项判断并处理:LEDGER TODO/DONE/最后核对、STATE 当前设计/决策/墓地、README/docs 漂移、被取代或零引用实现。`
+    + `${hints.length ? `核对信号:${hints.join(';')}。` : ''}`
+    + 'Hook 只提供事实,不替你下语义结论;不得因候选信号自动删除文件,需要清理时先给证据并遵守用户确认边界。';
 }
 
 export function msgScratchLeftover(scratch, files, limit = 8) {
@@ -60,11 +94,11 @@ export function msgPreCommitStale(files, scratch) {
 
 export function msgPreCommitLedger(block) {
   return block
-    ? '\n[tidykeep] 提交被拒绝:本次提交改动了代码/文档,但 LEDGER.md / STATE.md 未同步。\n'
-      + '请先完成收尾:LEDGER.md 完成项移入 DONE(附日期)、登记新 TODO;\n'
-      + '设计有变则更新 STATE.md 并把旧决策标 superseded。\n'
+    ? '\n[tidykeep] 提交被拒绝:本次提交改动了受管文件,但 LEDGER.md 缺少逐文件收尾证据。\n'
+      + '请先执行 tidykeep 收尾同步:对应 section 的完成项移入 DONE(附日期)、登记新 TODO并刷新最后核对;\n'
+      + 'STATE 与文档是否更新由 Agent 根据语义判断,Git hook 不伪装成语义分析器。\n'
       + '纯琐碎改动可 TIDYKEEP_SKIP=1 git commit ... 跳过(须说明原因)。\n'
-    : '[tidykeep] 提醒:LEDGER.md / STATE.md 未随本次改动更新,请确认是否遗漏。';
+    : '[tidykeep] 提醒:LEDGER.md 缺少本次受管变化的逐文件收尾证据,请执行 tidykeep 收尾同步。';
 }
 
 export function msgCommitMsgRejected(r, cfg) {

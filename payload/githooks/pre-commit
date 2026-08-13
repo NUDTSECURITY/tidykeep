@@ -1,14 +1,32 @@
 #!/bin/sh
 # tidykeep git hook shim(由 `npx tidykeep init` 管理;检查逻辑在 .tidykeep/runtime/githook.mjs)
-[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-# 链式执行接管前的本地 hook(Windows 下 -x 不可靠,判 -f 后用 sh 显式执行)
-legacy="$root/.git/hooks/pre-commit"
-if [ -f "$legacy" ] && [ "$(git config core.hooksPath 2>/dev/null)" = ".tidykeep/githooks" ]; then
-  sh "$legacy" "$@" || exit $?
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "[tidykeep] 错误:无法解析仓库根目录,拒绝提交" >&2
+  exit 1
+}
+common=$(git -C "$root" rev-parse --git-common-dir 2>/dev/null) || {
+  echo "[tidykeep] 错误:无法解析 Git common dir,拒绝提交" >&2
+  exit 1
+}
+case "$common" in
+  /*|[A-Za-z]:/*) ;;
+  *) common="$root/$common" ;;
+esac
+# 先链式执行接管前的本地 hook；直接执行以尊重其 shebang，非可执行文件按 Git 语义跳过。
+legacy="$common/hooks/pre-commit"
+hooks_path=$(git -C "$root" config --get core.hooksPath 2>/dev/null)
+hooks_status=$?
+if [ "$hooks_status" -ne 0 ] && [ "$hooks_status" -ne 1 ]; then
+  echo "[tidykeep] 错误:无法读取 core.hooksPath,拒绝提交" >&2
+  exit 1
 fi
+# 外部 hooksPath 中的 hook 已经是调用方；只在 tidykeep 自己接管时回链 common-dir legacy，避免递归。
+if [ "$hooks_path" = ".tidykeep/githooks" ] && [ -x "$legacy" ]; then
+  "$legacy" "$@" || exit $?
+fi
+[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
 if command -v node >/dev/null 2>&1; then
   exec node "$root/.tidykeep/runtime/githook.mjs" pre-commit "$@"
 fi
-echo "[tidykeep] 警告: 未找到 node,跳过 tidykeep 检查(guardrail 降级放行)" >&2
-exit 0
+echo "[tidykeep] 错误:未找到 node,tidykeep 硬边界无法运行,拒绝提交" >&2
+exit 1

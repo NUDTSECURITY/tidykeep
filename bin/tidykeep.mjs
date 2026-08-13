@@ -9,7 +9,7 @@ const HELP = `tidykeep — 跨 Agent 的项目知识保鲜工具(Claude Code / C
 
 用法:
   npx tidykeep init [dir]              安装/升级(幂等,重跑即升级)
-      --agents claude,codex,kimi       只装指定 agent(默认三家全装)
+      --agents claude,codex,kimi       本次接入指定 agent(已有接入保留;默认三家)
       --ledger-mode block|warn|off     台账强制等级(写入 config.jsonc)
       --scratch-dir .tmp               草稿区目录名
       --no-git-hooks                   不接管 git hooks
@@ -21,41 +21,71 @@ const HELP = `tidykeep — 跨 Agent 的项目知识保鲜工具(Claude Code / C
   npx tidykeep enable-githooks [dir]   启用 git hooks(团队成员克隆后一次)
 `;
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    agents: { type: 'string' },
-    'ledger-mode': { type: 'string' },
-    'scratch-dir': { type: 'string' },
-    'no-git-hooks': { type: 'boolean', default: false },
-    purge: { type: 'boolean', default: false },
-    json: { type: 'boolean', default: false },
-    fix: { type: 'boolean', default: false },
-    'dry-run': { type: 'boolean', default: false },
-    help: { type: 'boolean', short: 'h', default: false },
-    version: { type: 'boolean', short: 'v', default: false },
-  },
-});
+let values;
+let positionals;
+try {
+  ({ values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: {
+      agents: { type: 'string' },
+      'ledger-mode': { type: 'string' },
+      'scratch-dir': { type: 'string' },
+      'no-git-hooks': { type: 'boolean', default: false },
+      purge: { type: 'boolean', default: false },
+      json: { type: 'boolean', default: false },
+      fix: { type: 'boolean', default: false },
+      'dry-run': { type: 'boolean', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
+      version: { type: 'boolean', short: 'v', default: false },
+    },
+  }));
+} catch (error) {
+  console.error(`[tidykeep] 无效命令行参数: ${error?.message ?? error}`);
+  process.exit(1);
+}
 
-const [cmd, dirArg] = positionals;
+const [cmd, dirArg, ...extraPositionals] = positionals;
 
+if (values.version && cmd) {
+  console.error('[tidykeep] --version/-v 不能与命令同时使用');
+  process.exit(1);
+}
 if (values.version) {
   console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
   process.exit(0);
 }
 if (values.help || !cmd) {
   console.log(HELP);
-  process.exit(cmd ? 0 : 1);
+  process.exit(values.help ? 0 : 1);
+}
+if (extraPositionals.length) {
+  console.error(`[tidykeep] 无效位置参数: ${extraPositionals.join(' ')}`);
+  process.exit(1);
 }
 
 const common = { dryRun: values['dry-run'] };
+const supplied = new Set(process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => arg.split('=')[0]));
+const allowedOptions = {
+  init: new Set(['--agents', '--ledger-mode', '--scratch-dir', '--no-git-hooks', '--dry-run']),
+  uninstall: new Set(['--purge', '--dry-run']),
+  status: new Set(['--json']),
+  doctor: new Set(['--fix']),
+  'enable-githooks': new Set(),
+};
+if (cmd in allowedOptions) {
+  const invalid = [...supplied].filter((option) => !allowedOptions[cmd].has(option));
+  if (invalid.length) {
+    console.error(`[tidykeep] ${cmd} 不支持选项: ${invalid.join(', ')}`);
+    process.exit(1);
+  }
+}
 let code = 0;
 switch (cmd) {
   case 'init': {
     const { init } = await import('../src/commands/init.mjs');
     code = init(dirArg, {
       ...common,
-      agents: values.agents ? values.agents.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+      agents: values.agents !== undefined ? values.agents.split(',').map((s) => s.trim()) : undefined,
       ledgerMode: values['ledger-mode'],
       scratchDir: values['scratch-dir'],
       noGitHooks: values['no-git-hooks'],
@@ -79,7 +109,7 @@ switch (cmd) {
   }
   case 'enable-githooks': {
     const target = resolve(dirArg || process.cwd());
-    const r = spawnSync('node', [join(target, '.tidykeep', 'runtime', 'enable-githooks.mjs')], { stdio: 'inherit' });
+    const r = spawnSync(process.execPath, [join(target, '.tidykeep', 'runtime', 'enable-githooks.mjs')], { stdio: 'inherit' });
     code = r.status ?? 1;
     break;
   }

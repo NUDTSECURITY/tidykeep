@@ -12,10 +12,15 @@ export const CLAUDE_POINTER = `# 项目规则入口(tidykeep)
 
 export const gitignoreBlock = (scratch) => `${scratch}/
 .tidykeep/backup/
-.tidykeep/.state/`;
+.tidykeep/.state/
+.tidykeep/.install-transaction/
+.tidykeep/.install-lock/`;
 
 export const GITATTRIBUTES_BLOCK = `.tidykeep/githooks/* text eol=lf
-.tidykeep/runtime/* text eol=lf`;
+.tidykeep/runtime/* text eol=lf
+.tidykeep/docs/workflows.md text eol=lf
+.claude/skills/tidykeep/SKILL.md text eol=lf
+.agents/skills/tidykeep/SKILL.md text eol=lf`;
 
 const claudeHandler = (flavor, statusMessage, timeout = 20) => ({
   type: 'command',

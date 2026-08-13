@@ -9,7 +9,10 @@
 
   // 被视为"代码/文档改动"、从而要求同步台账的扩展名
   "CODE_EXTS": ["py", "js", "ts", "tsx", "jsx", "mjs", "cjs", "go", "rs", "java", "rb", "php", "c", "cc", "cpp", "h", "hpp", "cs", "swift", "kt", "scala", "sql", "sh", "bash", "zsh", "vue", "svelte", "ipynb"],
-  "DOC_EXTS": ["md", "rst", "txt", "adoc"],
+  "DOC_EXTS": ["md", "rst", "txt", "adoc", "json", "jsonc", "yml", "yaml", "toml", "xml", "properties", "gradle", "lock"],
+
+  // 无法按扩展名覆盖、但仍必须同步台账的项目根文件(精确相对路径)
+  "WATCH_FILES": ["package.json", ".gitignore", ".gitattributes", "pyproject.toml", "Cargo.toml", "go.mod", "Makefile", "Dockerfile"],
 
   // 历史副本命名模式(JS RegExp 语法,忽略大小写)
   // 命中示例:train_v2.py / a_old.ts / b-final.go / c_backup.sh / d copy.py / e(1).md / f副本.md
@@ -28,8 +31,7 @@
   "MIN_SUBJECT": 10,
   "MIN_BODY": 20,
 
-  // 收尾自动提交:"off" / "remind"(收尾完成未提交时打回一次,让 agent 写详细提交)
-  // / "auto"(hook 直接提交,信息取自 LEDGER 本次新增的 DONE 条目,仍过 git hooks 校验)。
-  // 触发条件 = 工作区有改动 且 台账已同步(即一段功能按协议收尾完成);纯对话不触发。
+  // 收尾提交提醒:"off" / "remind"。旧版 "auto" 会安全降级为 remind,
+  // 不再由 hook 暂存或提交整个工作区。
   "AUTO_COMMIT": "off",
 }

@@ -1,11 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   upsertBlockText, stripBlockText, detectEol,
-  upsertBlockFile, stripBlockFile,
 } from '../../src/lib/markers.mjs';
 
 const B = '<!-- tidykeep:begin -->';
@@ -81,20 +77,6 @@ test('upsertBlockText: CRLF 文件保持 CRLF,不混入孤立 LF', () => {
   assert.ok(r.text.includes(`${B}\r\nX\r\nY\r\n${E}`));
 });
 
-test('file 包装: 新建 → created;再写 → modified;剥空且为本工具创建语义交由调用方', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tk-markers-'));
-  const f = join(dir, 'AGENTS.md');
-  assert.equal(upsertBlockFile(f, B, E, 'X'), 'created');
-  assert.equal(upsertBlockFile(f, B, E, 'Y'), 'modified');
-  assert.equal(readFileSync(f, 'utf8'), BLOCK('Y'));
-  assert.equal(stripBlockFile(f, B, E), 'empty');
-  assert.equal(readFileSync(f, 'utf8'), '');
-  writeFileSync(f, '自有内容\n' + BLOCK('Z'));
-  assert.equal(stripBlockFile(f, B, E), 'kept');
-  assert.equal(stripBlockFile(join(dir, 'nope.md'), B, E), 'missing');
-  assert.ok(existsSync(f));
-});
-
 // ---------- 审查确认缺陷:标记不成对/逆序的安全语义 ----------
 
 test('孤立 begin(end 被误删):upsert 拒绝改写,原文不动', () => {
@@ -123,14 +105,4 @@ test('merge 产生的重复完整块:strip 全部剥除,upsert 归并为一个',
   assert.equal(u.status, 'ok');
   assert.equal((u.text.match(new RegExp('tidykeep:begin', 'g')) ?? []).length, 1);
   assert.ok(u.text.includes('NEW') && u.text.includes('user'));
-});
-
-test('file 包装: 不成对标记返回 unpaired 且文件保持原样', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tk-markers-unpaired-'));
-  const f = join(dir, 'AGENTS.md');
-  const orphan = `head\n${B}\n内容\n## 用户附录\n`;
-  writeFileSync(f, orphan);
-  assert.equal(upsertBlockFile(f, B, E, 'X'), 'unpaired');
-  assert.equal(stripBlockFile(f, B, E), 'unpaired');
-  assert.equal(readFileSync(f, 'utf8'), orphan);
 });

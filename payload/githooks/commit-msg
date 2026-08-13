@@ -1,13 +1,30 @@
 #!/bin/sh
 # tidykeep git hook shim(由 `npx tidykeep init` 管理;检查逻辑在 .tidykeep/runtime/githook.mjs)
-[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-legacy="$root/.git/hooks/commit-msg"
-if [ -f "$legacy" ] && [ "$(git config core.hooksPath 2>/dev/null)" = ".tidykeep/githooks" ]; then
-  sh "$legacy" "$@" || exit $?
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "[tidykeep] 错误:无法解析仓库根目录,拒绝提交" >&2
+  exit 1
+}
+common=$(git -C "$root" rev-parse --git-common-dir 2>/dev/null) || {
+  echo "[tidykeep] 错误:无法解析 Git common dir,拒绝提交" >&2
+  exit 1
+}
+case "$common" in
+  /*|[A-Za-z]:/*) ;;
+  *) common="$root/$common" ;;
+esac
+legacy="$common/hooks/commit-msg"
+hooks_path=$(git -C "$root" config --get core.hooksPath 2>/dev/null)
+hooks_status=$?
+if [ "$hooks_status" -ne 0 ] && [ "$hooks_status" -ne 1 ]; then
+  echo "[tidykeep] 错误:无法读取 core.hooksPath,拒绝提交" >&2
+  exit 1
 fi
+if [ "$hooks_path" = ".tidykeep/githooks" ] && [ -x "$legacy" ]; then
+  "$legacy" "$@" || exit $?
+fi
+[ "${TIDYKEEP_SKIP:-0}" = "1" ] && exit 0
 if command -v node >/dev/null 2>&1; then
   exec node "$root/.tidykeep/runtime/githook.mjs" commit-msg "$@"
 fi
-echo "[tidykeep] 警告: 未找到 node,跳过 tidykeep 检查(guardrail 降级放行)" >&2
-exit 0
+echo "[tidykeep] 错误:未找到 node,tidykeep 硬边界无法运行,拒绝提交" >&2
+exit 1

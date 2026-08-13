@@ -17,7 +17,8 @@
 目标:为存量项目建立 STATE.md、LEDGER.md 的初始内容,并清点历史包袱。
 
 1. **摸底**:用 `git ls-files`(非 git 仓库则遍历目录并遵守 .gitignore)列出全部受管文件
-   (扩展名 ∈ config 的 CODE_EXTS ∪ DOC_EXTS,排除草稿区 .tmp/、.tidykeep/、.claude/、.codex/、.agents/、.kimi-code/)。
+   (扩展名 ∈ config 的 CODE_EXTS ∪ DOC_EXTS,或路径命中 WATCH_FILES;排除配置 `SCRATCH_DIR`
+   指定的草稿区、.tidykeep/、.claude/、.codex/、.agents/、.kimi-code/)。
 2. **填 STATE.md「当前架构与设计」**:阅读入口文件与主要模块,用 5~15 句话写清:项目做什么、
    模块划分、数据流、关键约定。只写当前有效的事实,不写历史。
 3. **建 LEDGER.md 条目**:为每个受管文件生成一节(路径、最后核对=今天、TODO 空、DONE 写一行
@@ -35,14 +36,19 @@
 
 ## 工作流 2:收尾同步(每次任务结束)
 
-严格执行三件事,然后自检:
+该工作流既可由用户要求触发,也可由 Stop hook 在检测到受管变化时自动触发。Hook 只提供
+Git 状态中的确定性事实;收到 Hook 消息后必须调用 tidykeep skill,并以实际 diff 为准完成语义核对。
 
+0. **语义核对**:逐项阅读本次 diff,判断:(a) 当前架构、接口或约定是否变化;(b) README/docs 的
+   可验证断言是否仍成立;(c) 是否出现被取代、重复或零引用实现。Hook 给出的“代码未伴随文档”等
+   只是核对信号,不是修改或删除结论。发现清理候选时先给出引用证据和建议,**不得仅凭 Hook 信号自动删除**。
 1. **LEDGER.md**:本次完成项从 TODO 移入 DONE(`- [x] YYYY-MM-DD 描述`);新发现的待办登记进
    TODO;刷新涉及文件的"最后核对"。本次新建的受管文件要新建条目;删除的文件整节移除。
 2. **STATE.md**:设计/接口/架构有变 → 更新"当前架构与设计"对应段落;新增决策行(编号递增),
-   把被取代的旧决策标记 `superseded → 新编号`;删除的文件登记进墓地。
+   把被取代的旧决策标记 `superseded → 新编号`;删除的文件登记进墓地。若无变化则保持不动,
+   不为满足 Hook 制造空洞决策。
 3. **提交**:按 AGENTS.md 的 Commit 规范写主题 + 为什么 + 影响。
-4. **自检**:`git status` 确认没有游离的临时文件;`.tmp/` 中已完成使命的验证脚本删除,
+4. **自检**:`git status` 确认没有游离的临时文件;`SCRATCH_DIR` 中已完成使命的验证脚本删除,
    确需保留的向用户说明原因(Stop hook 会检查残留)。
    若 pre-commit / Stop hook 拦截,按提示补全,不要用 TIDYKEEP_SKIP 静默绕过;
    确需绕过时必须向用户说明原因。

@@ -1,4 +1,11 @@
+bin/*.mjs text eol=lf
+payload/githooks/* text eol=lf
+payload/runtime/* text eol=lf
+
 # >>> tidykeep >>>
 .tidykeep/githooks/* text eol=lf
 .tidykeep/runtime/* text eol=lf
+.tidykeep/docs/workflows.md text eol=lf
+.claude/skills/tidykeep/SKILL.md text eol=lf
+.agents/skills/tidykeep/SKILL.md text eol=lf
 # <<< tidykeep <<<

@@ -17,14 +17,15 @@
 
 **开工前:** 读 `STATE.md`(以"当前架构与设计"为唯一事实依据)与 `LEDGER.md` 中相关文件条目;**禁止**参考墓地中已废弃的方案,禁止复活已删除的旧实现。
 
-**干活时:** 优先修改现有文件,**禁止**创建 `_v2/_old/_new/_final/_backup/copy/副本` 等历史副本命名(hooks 当场拦截);只是参数不同时用 CLI 参数或配置文件,不复制脚本;一次性/实验/验证脚本统一放**项目内**草稿区 `.tmp/`(已 gitignore),**禁止**写系统 `/tmp`、`~/tmp`、`~/.tmp`、`$TMPDIR`(hooks 拦截),脚本完成使命后**立即删除**;不再使用的文件要**删除**(历史在 git,随时可找回)并在 `STATE.md` 墓地登记;文档必须反映现状——过期段落当场更新或删除,禁止"新版方案""临时做法"这类必然腐烂的措辞。
+**干活时:** 优先修改现有文件,**禁止**创建 `_v2/_old/_new/_final/_backup/copy/副本` 等历史副本命名(hooks 当场拦截);只是参数不同时用 CLI 参数或配置文件,不复制脚本;一次性/实验/验证脚本统一放**项目内**配置 `SCRATCH_DIR` 指定的草稿区(默认 `.tmp/`,已 gitignore),**禁止**写系统 `/tmp`、`~/tmp`、`~/.tmp`、`$TMPDIR`(hooks 拦截),脚本完成使命后**立即删除**;不再使用的文件要**删除**(历史在 git,随时可找回)并在 `STATE.md` 墓地登记;文档必须反映现状——过期段落当场更新或删除,禁止"新版方案""临时做法"这类必然腐烂的措辞。
 
-**收尾时(三件事,缺一不可,Stop hook 与 pre-commit 会检查):**
+**收尾时(三件事,缺一不可,Stop hook 与 pre-commit 会检查):** Stop hook 检测到受管变化时会给出
+有界变更事实并明确触发 `$tidykeep` 收尾同步;Agent 必须查看实际 diff 后判断,不得把 Hook 信号当语义结论。
 1. **更新 `LEDGER.md`**:完成项从 TODO 移入 DONE(附日期);新待办登记进 TODO;刷新相关文件的"最后核对"。
 2. **同步 `STATE.md`**:设计/架构/接口有变则更新"当前架构与设计",被取代的决策标记 `superseded → 新决策`;删除的文件登记进墓地。
 3. **详细提交**:按下方 Commit 规范(commit-msg hook 校验)。
 
-附加自检:`.tmp/` 中已完成使命的脚本删除;确需跨任务保留的,向用户说明原因。
+附加自检:`SCRATCH_DIR` 中已完成使命的脚本删除;确需跨任务保留的,向用户说明原因。
 
 **对外动作边界:** agent 的工作到 **commit 为止**。`git push`、npm publish、打 tag、对外交付等
 一切离开本机的动作**由人决定**,未经用户明确指示不得执行。任何"发布 / 交付 / 宣布完成"类
@@ -45,7 +46,7 @@
 
 ## hooks 与误报
 
-- Claude Code / Codex / Kimi 均装有 PreToolUse(拦副本命名、拦系统 tmp、引导到 `.tmp/`)与 Stop(收尾检查)hooks;git `pre-commit` / `commit-msg` 对所有 Agent 与人类兜底。hooks 是 guardrail——即使某家漏拦,本协议依然生效。
+- Claude Code / Codex / Kimi 均装有 PreToolUse(拦副本命名、拦系统 tmp、引导到 `SCRATCH_DIR`)与 Stop hooks;Stop 负责确定触发和汇总 Git 事实,Skill 负责判断 STATE/文档/清理候选,不得自动删除候选;git `pre-commit` / `commit-msg` 只验收可机械证明的提交证据。Git 检查故障默认拒绝,`TIDYKEEP_SKIP=1` 是显式逃生门且不会跳过用户原有 hook。native hooks 仍是 guardrail。
 - 误报处理:把精确相对路径逐行加入 `.tidykeep/allowlist`。配置见 `.tidykeep/config.jsonc`(改后即时生效)。
 
 ## 深度工作流

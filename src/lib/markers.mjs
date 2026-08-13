@@ -2,8 +2,6 @@
 //   1. 写回时跟随原文件主导 EOL(不在 CRLF 文件里混入孤立 LF);
 //   2. 严格配对校验——标记孤立/逆序(用户误删、merge 冲突)时拒绝改写并报 'unpaired',
 //      绝不静默吞掉夹在标记间的用户内容;merge 产生的重复完整块会被归并/全部剥除。
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-
 export function detectEol(text) {
   const crlf = (text.match(/\r\n/g) ?? []).length;
   const lf = (text.match(/(?<!\r)\n/g) ?? []).length;
@@ -87,22 +85,4 @@ export function stripBlockText(text, begin, end) {
   }
   const out = stripAllPairs(t, begin, end);
   return { text: eol === '\r\n' ? out.replaceAll('\n', '\r\n') : out, stripped: true, status: 'ok' };
-}
-
-export function upsertBlockFile(path, begin, end, content) {
-  const existed = existsSync(path);
-  const before = existed ? readFileSync(path, 'utf8') : '';
-  const { text, status } = upsertBlockText(before, begin, end, content);
-  if (status === 'unpaired') return 'unpaired';
-  writeFileSync(path, text);
-  return existed ? 'modified' : 'created';
-}
-
-export function stripBlockFile(path, begin, end) {
-  if (!existsSync(path)) return 'missing';
-  const before = readFileSync(path, 'utf8');
-  const { text, stripped, status } = stripBlockText(before, begin, end);
-  if (status === 'unpaired') return 'unpaired';
-  if (stripped) writeFileSync(path, text);
-  return (stripped ? text : before).trim() ? 'kept' : 'empty';
 }

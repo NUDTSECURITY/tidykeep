@@ -17,6 +17,9 @@ function findRoot(start) {
   let dir = resolve(start || process.cwd());
   for (;;) {
     if (existsSync(join(dir, '.tidykeep'))) return dir;
+    // 最近的嵌套 Git 工作区没有启用 tidykeep 时,不得继续向上继承外层项目配置。
+    // `.git` 在普通仓库中是目录,在 linked worktree/submodule 中是文件。
+    if (existsSync(join(dir, '.git'))) return null;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -116,50 +119,70 @@ function gcFlags(stateDir) {
   }
 }
 
-function gitIn(root, ...args) {
-  return spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 15000, shell: false });
+function fallbackSessionId(agent, payload) {
+  const parent = process.env.TIDYKEEP_PARENT_PID || process.ppid;
+  return `${agent}-${payload.session_id || `parent-${parent}`}`;
 }
 
-/** 收尾完成态(有改动且台账已同步)下的自动提交 / 提交提醒 */
-function maybeAutoCommit(agent, payload, ctx, entries) {
+function gitText(root, args) {
+  const result = spawnSync('git', ['-C', root, ...args], {
+    encoding: 'utf8', timeout: 10000, shell: false,
+  });
+  return !result.error && result.status === 0 ? result.stdout : null;
+}
+
+function localDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function ledgerState(root, entries, cfg) {
+  const basic = core.ledgerSyncCheck(entries, cfg);
+  if (!basic.workChanged || basic.needSync) return { ...basic, coverageOk: !basic.needSync, missing: [] };
+  const headExists = gitText(root, ['rev-parse', '--verify', 'HEAD']) !== null;
+  let headLedger = '';
+  if (headExists) {
+    const existsAtHead = gitText(root, ['cat-file', '-e', 'HEAD:LEDGER.md']) !== null;
+    if (existsAtHead) {
+      headLedger = gitText(root, ['show', 'HEAD:LEDGER.md']);
+      if (headLedger === null) return { ...basic, coverageOk: false, missing: basic.changes };
+    }
+  }
+  let currentLedger;
+  try { currentLedger = readFileSync(join(root, 'LEDGER.md'), 'utf8'); } catch {
+    return { ...basic, coverageOk: false, missing: basic.changes };
+  }
+  const coverage = core.ledgerCoverageCheck(
+    basic.changes,
+    headLedger,
+    currentLedger,
+    localDate(),
+  );
+  return { ...basic, coverageOk: coverage.ok, missing: coverage.missing };
+}
+
+/** 收尾完成态(有改动且台账已同步)下提醒提交;旧 auto 配置安全降级为 remind。 */
+function maybeCommitReminder(agent, payload, ctx, entries, sync) {
   const { cfg, root } = ctx;
   const autoMode = String(cfg.AUTO_COMMIT ?? 'off').toLowerCase();
-  if (autoMode !== 'auto' && autoMode !== 'remind') return;
+  if (autoMode !== 'remind') return;
   if (!entries || !entries.length) return; // 无改动(纯对话回合)不触发
-  const { needSync, ledgerChanged } = core.ledgerSyncCheck(entries, cfg);
+  const { needSync, ledgerChanged, coverageOk } = sync;
   // "功能完成"的确定性信号:台账被更新过且不再欠账——半成品(未收尾)不提交
-  if (needSync || !ledgerChanged) return;
+  if (needSync || !ledgerChanged || !coverageOk) return;
 
-  if (autoMode === 'remind') {
-    const flag = core.stopFlagPath(root, payload.session_id) + '-commit';
-    if (existsSync(flag)) return;
-    try {
-      mkdirSync(dirname(flag), { recursive: true });
-      writeFileSync(flag, '1');
-    } catch {
-      emitStopWarn(agent, msg.msgCommitRemind());
-      return;
-    }
-    emitStopBlock(agent, msg.msgCommitRemind());
+  const flag = core.stopFlagPath(root, fallbackSessionId(agent, payload)) + '-commit';
+  if (existsSync(flag)) return;
+  try {
+    mkdirSync(dirname(flag), { recursive: true });
+    writeFileSync(flag, '1');
+  } catch {
+    emitStopWarn(agent, msg.msgCommitRemind());
     return;
   }
-
-  // auto:hook 直接提交;信息取自 LEDGER 本次新增的 DONE 条目,仍经 git hooks 校验
-  if (gitIn(root, 'add', '-A').status !== 0) return;
-  const files = (gitIn(root, 'diff', '--cached', '--name-only', '-z').stdout ?? '')
-    .split('\0').filter(Boolean);
-  if (!files.length) return;
-  const ledgerDiff = gitIn(root, 'diff', '--cached', '--', 'LEDGER.md').stdout ?? '';
-  const message = core.buildAutoCommitMessage(core.newDoneItemsFromDiff(ledgerDiff), files);
-  const commit = gitIn(root, 'commit', '-m', message);
-  if (commit.status === 0) {
-    const hash = (gitIn(root, 'rev-parse', '--short', 'HEAD').stdout ?? '').trim();
-    emitStopWarn(agent, `tidykeep 已自动提交(AUTO_COMMIT=auto):${hash} ${message.split('\n')[0]}`);
-  } else {
-    // 被自身 pre-commit/commit-msg 拒绝等——把原因喂回 agent 去修,不静默
-    const why = ((commit.stderr ?? '') + (commit.stdout ?? '')).trim().slice(-600);
-    emitStopWarn(agent, `tidykeep 自动提交未成功,请手工处理:${why}`);
-  }
+  emitStopBlock(agent, msg.msgCommitRemind());
 }
 
 function handleStop(agent, payload, ctx) {
@@ -170,15 +193,23 @@ function handleStop(agent, payload, ctx) {
   const autoMode = String(cfg.AUTO_COMMIT ?? 'off').toLowerCase();
   if (mode === 'off' && !checkTmp && autoMode === 'off') return;
 
-  const flag = core.stopFlagPath(root, payload.session_id);
-  const flagUsed = existsSync(flag); // 本会话已强制过一次 → 不再打回,但仍可自动提交
+  const flag = core.stopFlagPath(root, fallbackSessionId(agent, payload));
+  const flagUsed = existsSync(flag); // 本会话已强制过一次 → 不再打回；提交提醒另用独立标记
   gcFlags(dirname(flag));
   const entries = core.gitStatusEntries(root);
+  const sync = entries ? ledgerState(root, entries, cfg) : null;
+  const review = entries ? core.semanticReviewFacts(entries, cfg) : null;
 
   if (!flagUsed) {
     const issues = [];
-    if (mode !== 'off' && entries && core.ledgerSyncCheck(entries, cfg).needSync) {
-      issues.push(msg.msgLedgerSync());
+    // 确定性 hook 只负责在正确时机把有界变更事实交给 Agent；语义判断由 tidykeep skill 完成。
+    // 即使 LEDGER 已机械同步也触发一次，避免“台账改了但未审查 STATE/文档/清理候选”的空心收尾。
+    if (mode !== 'off' && review?.total) {
+      issues.push(msg.msgSemanticReview(review));
+    }
+    if (mode !== 'off' && sync && (sync.needSync || !sync.coverageOk)) {
+      const missing = (sync.missing ?? []).map((item) => item.path).filter(Boolean);
+      issues.push(msg.msgLedgerSync() + (missing.length ? ` 尚未逐文件覆盖:${missing.join('、')}。` : ''));
     }
     if (checkTmp) {
       const leftovers = core.scratchLeftovers(root, cfg);
@@ -208,7 +239,7 @@ function handleStop(agent, payload, ctx) {
     }
   }
 
-  maybeAutoCommit(agent, payload, ctx, entries);
+  maybeCommitReminder(agent, payload, ctx, entries, sync ?? { coverageOk: false });
 }
 
 function main() {
@@ -224,7 +255,9 @@ function main() {
   }
   if (!payload || typeof payload !== 'object') return;
 
-  const root = findRoot(process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd());
+  // 事件 cwd 比 Claude 的外层项目环境变量更接近实际操作位置。若 cwd 位于一个
+  // 未接入 tidykeep 的嵌套 Git 仓库，findRoot 会在该边界停止，不能继承外层守卫。
+  const root = findRoot(payload.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd());
   if (!root) return; // 未启用 tidykeep 的项目:放行(也是 Kimi 全局 hook 的项目守卫)
 
   const ctx = { root, cfg: core.loadConfig(root), allow: core.loadAllowlist(root) };

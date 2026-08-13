@@ -1,27 +1,108 @@
 {
-  "manifestVersion": 2,
+  "manifestVersion": 3,
   "toolVersion": "0.1.0",
   "runtimeVersion": "0.1.0",
-  "installedAt": "2026-08-12T16:54:08.329Z",
   "agents": [
     "claude",
     "codex",
     "kimi"
   ],
   "files": {
-    "AGENTS.md": "created",
-    "STATE.md": "created",
-    "LEDGER.md": "created",
-    ".gitignore": "modified",
-    ".gitattributes": "created",
-    "CLAUDE.md": "created",
-    ".claude/settings.json": "created",
-    ".codex/hooks.json": "created"
-  },
-  "hookspath": "set",
-  "kimi": {
-    "status": "installed",
-    "configToml": "/home/fanzhenye/.kimi-code/config.toml"
-  },
-  "backups": []
+    ".agents/skills/tidykeep/SKILL.md": {
+      "ownership": "created",
+      "hash": "834749ba544875886afd71dfccc95af7139f31bc12d297832115571856e1dbb3",
+      "kind": "managed",
+      "managed": true
+    },
+    ".claude/skills/tidykeep/SKILL.md": {
+      "ownership": "created",
+      "hash": "834749ba544875886afd71dfccc95af7139f31bc12d297832115571856e1dbb3",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/docs/workflows.md": {
+      "ownership": "created",
+      "hash": "0ec9f6d85a4fa3f218d9c326c858fe1a9d1dd382fb89d2ea0113733d9bca7e32",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/githooks/commit-msg": {
+      "ownership": "created",
+      "hash": "a764e5b85b7625013bdf89050a946eed68ef6b6f0dbb81a884180df566f80001",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/githooks/pre-commit": {
+      "ownership": "created",
+      "hash": "3bd128f3750cf91042f1965ce7f3cf7f5ba8a5a2ad9dac7e0accdadb3ac39aaa",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/config.mjs": {
+      "ownership": "created",
+      "hash": "59f1da113f06640ddd1cc3ad1b25b236f9750908e696641e1679b962dd65395c",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/core.mjs": {
+      "ownership": "created",
+      "hash": "dc894ff915a39656f8c332a10b1feaa80100e7ec9f8b4e1c00a9aa8be1bbc9b1",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/enable-githooks.mjs": {
+      "ownership": "created",
+      "hash": "cc8d9097c6a56c5114a1bf2a1509d695b106f57f11eb1ee80d568f22247bac7f",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/git-policy.mjs": {
+      "ownership": "created",
+      "hash": "b44dc7f1d189f6fe2d95af8bc95cb963b603bd79f12ed3cfc6c824b699739a49",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/githook.mjs": {
+      "ownership": "created",
+      "hash": "08f2b4630dcfc17cebd8b25cc0ea00deef21451315e416d43383c5adb569ef96",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/hook.mjs": {
+      "ownership": "created",
+      "hash": "2ddb58f413408ddae2995866f5edc6c0254b3fc61d1d1f55e17b833eb826b875",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/kimi-shim.mjs": {
+      "ownership": "created",
+      "hash": "70842d4ae2840bd63d6db0c1f09088d4fa2080fc383b318bfdbd1bff39edf235",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/ledger.mjs": {
+      "ownership": "created",
+      "hash": "77c1bf681c33b306e7c626c121e54c06991d0b8ba9948093decec2e4cd1df5c7",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/messages.mjs": {
+      "ownership": "created",
+      "hash": "f0569821f0cf2cd9ed2d5fb01d61bc5126fc4bae23028777039391e40fc7cb46",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/paths.mjs": {
+      "ownership": "created",
+      "hash": "e2df5ddfdb1f0d44c4e45d81ddcde59d70244f93820e38204b0c446cd8be87f5",
+      "kind": "managed",
+      "managed": true
+    },
+    ".tidykeep/runtime/write-policy.mjs": {
+      "ownership": "created",
+      "hash": "7c5fcf1b0ddf0a5d261fda86dd64a38ed41439d5e1c0e30cbb0c951bace2544a",
+      "kind": "managed",
+      "managed": true
+    }
+  }
 }

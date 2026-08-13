@@ -9,7 +9,10 @@
 
   // 被视为"代码/文档改动"、从而要求同步台账的扩展名
   "CODE_EXTS": ["py", "js", "ts", "tsx", "jsx", "mjs", "cjs", "go", "rs", "java", "rb", "php", "c", "cc", "cpp", "h", "hpp", "cs", "swift", "kt", "scala", "sql", "sh", "bash", "zsh", "vue", "svelte", "ipynb"],
-  "DOC_EXTS": ["md", "rst", "txt", "adoc"],
+  "DOC_EXTS": ["md", "rst", "txt", "adoc", "json", "jsonc", "yml", "yaml", "toml", "xml", "properties", "gradle", "lock"],
+
+  // 无法按扩展名覆盖、但仍必须同步台账的项目根文件(精确相对路径)
+  "WATCH_FILES": ["package.json", ".gitignore", ".gitattributes", ".github/workflows/ci.yml", "payload/config.jsonc", "payload/githooks/pre-commit", "payload/githooks/commit-msg", "pyproject.toml", "Cargo.toml", "go.mod", "Makefile", "Dockerfile"],
 
   // 历史副本命名模式(JS RegExp 语法,忽略大小写)
   // 命中示例:train_v2.py / a_old.ts / b-final.go / c_backup.sh / d copy.py / e(1).md / f副本.md
@@ -27,4 +30,8 @@
   // commit 主题/正文最小长度(按字符计,中英文同权)
   "MIN_SUBJECT": 10,
   "MIN_BODY": 20,
+
+  // 收尾提交提醒:"off" / "remind"。旧版 "auto" 会安全降级为 remind,
+  // 不再由 hook 暂存或提交整个工作区。
+  "AUTO_COMMIT": "off",
 }
