@@ -1,173 +1,103 @@
-# tidykeep — AI 编码的旧知识 / 旧代码 / 旧文档管理工具
+# tidykeep
 
-解决用 Claude Code、Codex、Kimi 等 Agent 开发时的四个老毛病:
+让项目只保留当前有效的代码、文档和设计。适用于同时使用 Claude Code、Codex、Kimi Code 的团队。
 
-1. 改个参数就复制一个 `xxx_v2.py`,旧版本一直留着干扰后续开发;
-2. 每个 Agent 一套规则文件(CLAUDE.md / AGENTS.md / Kimi 全局),互相不同步;
-3. 设计早就变了,文档还停留在旧方案,没人负责更新;
-4. 验证脚本随手丢进系统 `/tmp` 或 `~/.tmp`,用完不删,散落在项目之外无人管理。
+tidykeep 维护五件事：
 
-## 设计
+- `AGENTS.md`：所有 Agent 的统一规则入口；
+- `STATE.md`：当前设计、决策和已废弃内容；
+- `LEDGER.md`：受管文件的 TODO、DONE 与最后核对日期；
+- native hooks / git hooks：在写入、收尾和提交时检查流程；
+- 项目内草稿区 `.tmp/`：集中存放一次性脚本，用完删除。
 
-```
-                ┌───────────────  唯一规则入口  ────────────────┐
-Codex ──────────┤                                               │
-Kimi Code ──────┤   AGENTS.md(tidykeep 协议,唯一维护点)       │
-Claude Code ────┤   CLAUDE.md ──@import──▶ AGENTS.md(纯指针)  │
-                └───────────────────────────────────────────────┘
-                                │ 协议要求维护
-                ┌───────────────▼───────────────┐
-                │ STATE.md   当前设计唯一真相     │  决策记录(ADR-lite) + 已废弃墓地
-                │ LEDGER.md  每个文件 TODO/DONE  │  每次任务收尾必须更新
-                └───────────────┬───────────────┘
-                                │ 硬约束(两层)
-        ┌───────────────────────┴───────────────────────────────┐
-        │ 各家 native hooks(PreToolUse 拦副本命名/拦系统 tmp;  │
-        │                    Stop 收尾检查台账与 .tmp/ 残留)    │
-        │   Claude Code → .claude/settings.json                  │
-        │   Codex       → .codex/hooks.json(随仓库分发)        │
-        │   Kimi Code   → ~/.kimi-code/config.toml(全局,经     │
-        │                 ~/.tidykeep/kimi-shim.mjs 按项目路由)  │
-        │ git hooks(对所有 Agent 与人类兜底)                   │
-        │   pre-commit: 垃圾命名拦截 + 台账同步检查              │
-        │   commit-msg: 强制"做了什么/为什么/影响"的详细提交     │
-        └────────────────────────────────────────────────────────┘
-```
+这些 hooks 是开发流程 guardrail，不是操作系统级隔离或安全边界。
 
-**为什么选 AGENTS.md 做唯一入口**(以下均经官方文档核实,2026-08):
-[AGENTS.md](https://agents.md/) 是 Linux Foundation 旗下 Agentic AI Foundation 托管的公开标准;
-Codex 与 Kimi Code 原生读取项目根的 AGENTS.md;Claude Code 只读 CLAUDE.md,
-但官方推荐用一行 `@AGENTS.md` 导入,正是本工具的做法。
-**hooks 是 guardrail 而非安全边界**(Codex 官方原话),所以 git hooks 兜底层永远保留。
+## 安装
 
-## 安装 / 卸载(需要 Node.js ≥ 20.11)
+要求 Node.js >= 20.11，运行时零第三方依赖。
 
-> 尚未发布到 npm registry。发布前请克隆本仓库后用 `node <仓库路径>/bin/tidykeep.mjs` 代替
-> 下文的 `npx tidykeep`,命令与参数完全相同;发布后即可直接 `npx`。
+当前尚未发布到 npm registry。克隆本仓库后先从源码调用：
 
 ```bash
-npx tidykeep init                    # 安装到当前项目(幂等,重跑即升级)
-npx tidykeep init /path/to/project   # 指定目标项目
-npx tidykeep init --agents claude,codex   # 只装部分 agent(默认三家全装)
-npx tidykeep init --ledger-mode warn      # 台账检查降级为仅提醒(block|warn|off)
-npx tidykeep init --no-git-hooks          # 不接管 git hooks
-
-npx tidykeep status                  # 安装状态速览(--json 机器可读)
-npx tidykeep doctor --fix            # 深度体检并修复执行位/EOL 等安全项
-
-npx tidykeep uninstall               # 卸载:标记块精确回滚,保留 STATE/LEDGER
-npx tidykeep uninstall --purge       # 连 STATE.md / LEDGER.md 一并移除
+TK=/absolute/path/to/tidykeep/bin/tidykeep.mjs
+node "$TK" init /path/to/project
 ```
 
-所有注入内容都包在 `<!-- tidykeep:begin/end -->`(或 `# >>> tidykeep >>>`)标记块里,
-卸载只移除标记块,不碰你自己的内容;已有的 `.claude/settings.json`、`.codex/hooks.json`、
-Kimi `config.toml` 修改前都会先备份(`.tidykeep/backup/`、`~/.tidykeep/backup/`)。
+发布后可将 `node "$TK"` 换成 `npx tidykeep`。
 
-## 安装后的项目结构
+```bash
+# 安装或升级；默认接入 Claude、Codex、Kimi 和 git hooks
+node "$TK" init [dir]
 
-```
-project/
-├── AGENTS.md            # 唯一规则入口(注入 tidykeep 协议块,≤3KiB)
-├── CLAUDE.md            # 指针: @AGENTS.md
-├── STATE.md             # 当前设计唯一真相 + 决策记录 + 墓地
-├── LEDGER.md            # 每个文件的 TODO/DONE 台账
-├── .tmp/                # 临时/验证脚本专用(已 gitignore;收尾检查残留)
-├── .claude/             # settings.json(hooks)+ skills/tidykeep/
-├── .codex/hooks.json    # Codex hooks(随仓库分发)
-├── .agents/skills/      # Kimi 读取的项目级技能
-└── .tidykeep/
-    ├── config.jsonc     # 配置(JSONC,改后即时生效)
-    ├── allowlist        # 误报免检清单
-    ├── runtime/         # vendored Node 运行时(离线、零依赖、可入库、可审计)
-    ├── githooks/        # pre-commit / commit-msg 薄壳(sh → node)
-    └── docs/workflows.md# 初始化扫描/收尾同步/体检审计 的完整工作流(单一真源)
+# 常用选项
+node "$TK" init --agents claude,codex
+node "$TK" init --ledger-mode block   # block | warn | off
+node "$TK" init --scratch-dir .tmp
+node "$TK" init --no-git-hooks
+node "$TK" init --dry-run
+
+# 检查
+node "$TK" status [dir] [--json]
+node "$TK" doctor [dir] [--fix]
+
+# 卸载
+node "$TK" uninstall [dir]
+node "$TK" uninstall [dir] --purge
 ```
 
-## 日常使用
+默认卸载会保留 `STATE.md`、`LEDGER.md` 和草稿目录。`--purge` 只删除安装清单中记录为 tidykeep 创建的 `STATE.md`、`LEDGER.md`，不会删除接入前已有的同名文件。
 
-**第一次(必做)**:让 Agent 执行初始化扫描——Claude Code / Kimi 直接说"tidykeep 初始化扫描";
-Codex 说"按照 AGENTS.md 的 tidykeep 协议执行初始化扫描"。它会填充 STATE.md、为存量文件建台账,
-并清点出历史副本/死文件/过期文档的待处理清单,等你确认后清理。
+## 日常工作流
 
-**每次任务**:正常干活即可。协议 + hooks 会保证 Agent 开工前读 STATE/LEDGER、收尾时更新台账并写
-详细 commit;想复制 `xxx_v2.py` 会被当场拦下;想把验证脚本写进系统 `/tmp`、`~/.tmp` 也会被拦下
-并引导到项目内 `.tmp/`(收尾时检查残留,要求删除或说明)。
+1. 安装后让 Agent 执行“tidykeep 初始化扫描”，建立当前设计与文件台账。
+2. 每次开工前读取 `STATE.md` 和相关 `LEDGER.md` 条目。
+3. 收尾时同步台账；设计、架构或接口变化时同步 `STATE.md`。
+4. 定期执行“tidykeep 体检审计”，确认后再清理死文件、重复实现和过期文档。
 
-**定期**:说"tidykeep 体检审计",产出死文件/重复实现/文档漂移/台账过期的证据清单,
-逐项确认后执行清理,删除项自动登记进 STATE.md 墓地。
+发布或交付前必须先完成体检审计。Agent 的工作边界到本地 commit；push、tag 和 publish 由人决定。
 
-**团队协作**:把 AGENTS.md、CLAUDE.md、STATE.md、LEDGER.md、`.tidykeep/`、`.claude/`、`.codex/`、
-`.agents/` 提交入库;成员克隆后执行一次 `node .tidykeep/runtime/enable-githooks.mjs`
-(`core.hooksPath` 是本地 git 配置,不随仓库同步;此命令离线可用)。
-Kimi 用户各自跑一次 `npx tidykeep init`(Kimi hooks 在用户全局配置)。
+## 配置
 
-## 配置(.tidykeep/config.jsonc,改后即时生效)
+配置文件是 `.tidykeep/config.jsonc`，支持注释和尾逗号。
 
-| 键 | 说明 | 默认 |
+| 配置 | 作用 | 默认值 |
 |---|---|---|
-| `GUARD` | 命名拦截开关 | true |
-| `ENFORCE_LEDGER` | 台账同步强制等级 block/warn/off | "block" |
-| `CODE_EXTS` / `DOC_EXTS` | 视为"需同步台账"的扩展名数组 | 常见语言 / md 等 |
-| `STALE_RE` | 历史副本命名正则(JS RegExp) | `_v2/_old/_final/copy/副本…` |
-| `SCRATCH_DIR` | 项目内草稿区目录名 | ".tmp" |
-| `FORBID_SYSTEM_TMP` | 禁止在系统 /tmp、~/tmp、~/.tmp、$TMPDIR、%TEMP% 落盘 | true |
-| `CHECK_TMP_LEFTOVER` | 收尾时检查草稿区残留文件 | true |
-| `MIN_SUBJECT` / `MIN_BODY` | commit 主题/正文最小字符数 | 10 / 20 |
-| `AUTO_COMMIT` | 收尾自动提交:off / remind(打回一次提醒提交,信息由 agent/人来写)/ auto(hook 直接提交,信息取自 LEDGER 新增 DONE 条目) | "off" |
+| `GUARD` | 检查 `_v2`、`_old`、`copy`、`副本` 等历史副本命名 | `true` |
+| `ENFORCE_LEDGER` | 台账检查等级：`block` / `warn` / `off` | `"block"` |
+| `CODE_EXTS` / `DOC_EXTS` | 需要同步台账的文件扩展名 | 常用代码与文档类型 |
+| `STALE_RE` | 历史副本命名正则 | 内置规则 |
+| `SCRATCH_DIR` | 项目内草稿目录 | `".tmp"` |
+| `FORBID_SYSTEM_TMP` / `CHECK_TMP_LEFTOVER` | 系统临时目录写入与草稿残留检查 | `true` |
+| `MIN_SUBJECT` / `MIN_BODY` | commit 主题与正文最小字符数 | `10` / `20` |
+| `AUTO_COMMIT` | `off` / `remind` / `auto` | `"off"` |
 
-误报处理:把精确相对路径逐行加入 `.tidykeep/allowlist`。
-临时绕过提交检查:`TIDYKEEP_SKIP=1 git commit ...`(协议要求向协作者说明原因)。
+推荐使用 `AUTO_COMMIT=off` 或 `remind`。`auto` 会执行 `git add -A` 并提交当前整个工作区，只适合没有无关改动的隔离任务。
 
-## 三家 Agent 的接入方式(官方文档依据)
+误报时，将精确相对路径逐行加入 `.tidykeep/allowlist`。必要时可用 `TIDYKEEP_SKIP=1 git commit ...` 跳过 tidykeep 的提交检查，并向协作者说明原因。
 
-| Agent | 规则入口 | hooks 配置 | 依据 |
-|---|---|---|---|
-| Claude Code | CLAUDE.md `@AGENTS.md` 导入 | `.claude/settings.json`(PreToolUse: `Write\|Edit\|NotebookEdit` + `Bash\|PowerShell`;Stop) | [memory](https://code.claude.com/docs/en/memory)、[hooks](https://code.claude.com/docs/en/hooks) |
-| Codex | 原生读 AGENTS.md(全局→根→cwd 拼接,32KiB 预算) | 项目级 `.codex/hooks.json`(PreToolUse 拦 `apply_patch`/`Bash`;Stop) | [agents-md](https://developers.openai.com/codex/guides/agents-md)、[hooks](https://developers.openai.com/codex/hooks) |
-| Kimi Code | 原生读 AGENTS.md;技能在 `.agents/skills/` | 用户全局 `~/.kimi-code/config.toml` `[[hooks]]`(经 shim 按项目路由;未启用项目零影响) | [hooks](https://moonshotai.github.io/kimi-code/en/customization/hooks.html)、[data-locations](https://moonshotai.github.io/kimi-code/en/configuration/data-locations.html) |
+## 团队与 Agent 接入
 
-## FAQ
+| Agent | 规则入口 | hooks 位置 |
+|---|---|---|
+| Claude Code | `CLAUDE.md` 导入 `AGENTS.md` | `.claude/settings.json` |
+| Codex | 原生读取 `AGENTS.md` | `.codex/hooks.json` |
+| Kimi Code | 原生读取 `AGENTS.md`，技能在 `.agents/skills/` | 用户级 `~/.kimi-code/config.toml`，经 shim 按项目路由 |
 
-**为什么临时脚本放项目内 `.tmp/` 而不是系统 `/tmp`?** 系统 /tmp 里的残留脚本不可见、无人清理、
-也进不了任何审计流程;项目内 `.tmp/` 已 gitignore(不污染仓库),但对 Stop hook、体检审计和你
-自己都可见——残留会被点名要求删除或说明。
+将知识文件、`.tidykeep/` 和已启用 Agent 的配置目录提交入库。团队成员克隆后运行一次：
 
-**hooks 拦不住怎么办?** 三家官方都把 hooks 定位为 guardrail(Kimi 明确 fail-open、Codex 明确
-"模型可写脚本绕过")。所以真正的硬边界是 git hooks:垃圾命名和未同步台账在 commit 时被二次拦截,
-对人类同样生效。
+```bash
+node .tidykeep/runtime/enable-githooks.mjs
+```
 
-**Kimi 为什么要动全局配置?** 官方仅支持在 `~/.kimi-code/config.toml` 配 hooks(项目级 local.toml
-只支持 `[workspace]`,核实于 2026-08)。tidykeep 用标记块注入、shim 路由:事件来自未启用项目时
-立即放行,卸载按引用计数,最后一个项目卸载时全局块自动移除。
+Kimi 用户还需各自运行一次 `init`。如果项目已有 husky 或其他 `core.hooksPath`，安装器不会覆盖，而会输出链式接入指引。
 
-**已用 husky / 已设 core.hooksPath?** 安装器不会覆盖,会打印两行接入代码,把 tidykeep 的检查
-链进你现有 hooks。接管前 `.git/hooks/` 里已有的同名 hook 会被链式执行。
+## 已知边界
 
-**Stop hook 会不会死循环?** 不会:识别官方 `stop_hook_active` 标志,且同一会话最多强制一次
-(标记存放于项目内 `.tidykeep/.state/`,不落系统 tmp;Claude 另有连续 block 上限 8 次的官方硬顶)。
-
-**自动提交怎么用?** `AUTO_COMMIT` 的触发条件是"工作区有改动 **且** 台账已同步"——按协议这就是
-一段功能收尾完成的确定性信号;纯对话回合没有改动,不会触发。判断"功能是否完成"这件事大模型
-并不可靠,所以推荐 `remind`(hook 只打回一次提醒,提交信息由 agent/人自己写,质量最好)或维持
-`off` 完全手动;`auto` 档由 hook 直接提交(信息自动取自 LEDGER 本次新增的 DONE 条目,照样要过
-pre-commit / commit-msg 校验),适合无人值守场景。
-
-**Windows?** 安装器与 hooks 全部为 Node 实现;git hooks 薄壳由 Git for Windows 自带的 sh 执行
-(husky 同款机制),`.gitattributes` 已注入 `eol=lf` 护栏防止 CRLF 污染。异常时 `npx tidykeep doctor --fix`。
-
-**旧 bash 版(install.sh)装过的项目?** 直接 `npx tidykeep init`:自动迁移配置值、替换 python
-hooks 与 settings.json 里的 python3 条目、转换安装清单,旧文件删除(历史在 git)。
-
-## 已知边界(v0.1.0)
-
-如实告知当前版本的能力边界(全部行为已按官方文档实现并通过 120 项自动化测试,
-但以下细节官方文档未记载,在真实 agent 中的表现可能与预期有差异):
-
-- **Codex**:`apply_patch` 输入的字符串与数组两种形态均已支持,以实机为准;项目级 hooks 首次生效可能有信任确认交互。
-- **Kimi**:PreToolUse 字段名采用防御式解析(只读工具带 path 一律放行、写入类工具名正向门控),识别不了的工具会放行而不是误拦;hooks 无 matcher、全量触发,极端高频操作下有进程开销。
-- **Windows**:git hooks 依赖 Git for Windows 自带的 sh;GUI git 客户端的 PATH 里没有 node 时,git 层检查会降级放行并告警。
-
-逐项的实机验证跟踪在 `LEDGER.md` 对应文件的 TODO 里(这是本工具自己的协议:可执行的待办住台账,不住 README)。
+- native hooks 依赖各 Agent 提供的事件与参数；无法识别的工具会放行。
+- git hooks 可被 `TIDYKEEP_SKIP` 显式跳过；找不到 Node 或内部检查异常时会告警并放行。
+- Codex 的 `apply_patch` 输入、Kimi 的事件字段以及 Windows 命令解析仍需更多实机验证。
+- Windows git hooks 依赖 Git for Windows 的 `sh`，并要求 Git 进程的 `PATH` 能找到 Node。
+- 标记块不成对时不会自动改写，需要人工修复；接入前也应确认没有同名自定义 tidykeep skill。
 
 ## License
 
