@@ -33,6 +33,8 @@ const SKILL_FILES = [
   '.claude/skills/sdlc/SKILL.md',
   '.agents/skills/sdlc/SKILL.md',
   '.agents/skills/sdlc/templates/poc-test-case.md',
+  '.claude/skills/blind-test/SKILL.md',
+  '.agents/skills/blind-test/references/mutation-check.md',
 ];
 
 test('init:全新安装铺齐两处 skill、三个标记块与 STATE.md', () => {

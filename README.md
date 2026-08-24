@@ -34,8 +34,8 @@ node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project --dry-run
 
 | 路径 | 内容 |
 |---|---|
-| `.claude/skills/{tidykeep,sdlc}/` | 两个 skill，供 Claude Code 与 Kimi Code 发现 |
-| `.agents/skills/{tidykeep,sdlc}/` | 同上，供 Codex 与 Kimi Code 发现 |
+| `.claude/skills/{tidykeep,sdlc,blind-test}/` | 三个 skill，供 Claude Code 与 Kimi Code 发现 |
+| `.agents/skills/{tidykeep,sdlc,blind-test}/` | 同上，供 Codex 与 Kimi Code 发现 |
 | `AGENTS.md` | tidykeep 协议块（标记块内） |
 | `CLAUDE.md` | `@AGENTS.md` 指针（标记块内） |
 | `.gitignore` | `.tmp/` 草稿区（标记块内） |
@@ -44,7 +44,7 @@ node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project --dry-run
 只铺 `.claude/skills/` 和 `.agents/skills/` 两处就覆盖三家：Codex 只扫 `.agents/skills`，
 Claude Code 读 `.claude/skills`，Kimi Code 两处都读。
 
-## 两个 skill
+## 三个 skill
 
 **`tidykeep`** —— 知识与规范收尾。六个事实面（代码、运行态、文档、规则、记忆、工作区）
 各自标明状态，不允许把未验证写成完成；权限分四档，检查深度可扩大但操作权限不扩大；
@@ -53,6 +53,13 @@ Claude Code 读 `.claude/skills`，Kimi Code 两处都读。
 
 **`sdlc`** —— 需求澄清 → 价值评估 → 方案设计 → PRD → 开发 → 质量验证 → 修复回归 →
 文档维护，八阶段强制按序推进。它只管技术文档本身，项目级知识收尾仍归 tidykeep。
+
+**`blind-test`** —— 让测试真的能证伪。同一个模型先写实现再写测试时，测试会退化成把实现
+抄一遍：实现里把 `<=` 写成 `<`，测试的边界值也跟着挑那个不会暴露差异的。这不是态度问题，
+是共享上下文的结构问题。它要求契约先行、测试作者与实现者上下文隔离（靠工具权限而非提示词）、
+**每条测试绑定一条里程碑验收条款**（没有条款就没有测试，一条条款最多一个测试），
+最后用变异检查机械证明测试能挂——存活的变异就是假测试。触发词：`blind-test`、盲测、
+测试写得太假、补测试、精简测试用例。
 
 ## 重复安装
 

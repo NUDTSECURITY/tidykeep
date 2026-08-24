@@ -29,8 +29,11 @@
   not-applicable)、权限四档、轻量/完整双路径、证据层级与发布状态机、记忆写入边界、
   变更影响矩阵、两阶段汇报、最终自检。细节分置于 4 份 references。
 - **`sdlc` skill** 覆盖需求澄清→价值评估→方案设计→PRD→开发→质量验证→修复回归→
-  文档维护的八阶段流程。它只管技术文档本身;项目级知识收尾归 tidykeep,两者在
-  `sdlc/SKILL.md` 中有明确分工声明,不重复实现。
+  文档维护的八阶段流程。它只管技术文档本身;项目级知识收尾归 tidykeep,测试真实性归
+  blind-test,三者在 `sdlc/SKILL.md` 中有明确分工声明,不重复实现。
+- **`blind-test` skill** 解决 agent 自写测试的失效问题:同一上下文先写实现再写测试时,
+  测试会退化为实现的镜像。四项完成合同——契约(里程碑验收条款)、隔离(工具权限而非提示词)、
+  经济(一条条款最多一个测试)、证伪力(变异检查)。变异检查是其中唯一能机械证明测试有效的手段。
 - 知识层只有 `STATE.md` 一个文件。逐文件变更简史交回 `git log`。
 - 测试覆盖标记块边界、原子写、路径与 Git 边界、init/uninstall e2e,以及 skill 资产
   格式校验(name 等于目录名、description 长度、SKILL.md 体量预算、references 链接可达)。
@@ -64,6 +67,7 @@
 | D-022 | 2026-08-24 | **退回纯 skill 分发**:吸收 neat-freak 为 tidykeep skill 主体,砍掉三家 native hooks、git hooks、LEDGER 台账、manifest/安装事务/目录锁、config.jsonc/allowlist、doctor/status。理由:hooks 占据绝大部分代码与维护成本,而其独有价值(两条写入拦截 + 提交校验)低于其复杂度;协议约束改由 skill 承载。**已知代价:强制力归零,规则全靠 Agent 自觉。** | active |
 | D-023 | 2026-08-24 | skill 只铺 `.claude/skills/` 与 `.agents/skills/` 两处即覆盖三家(官方核实:Codex 只扫 `.agents/skills`;Kimi 两处都读;Claude 读 `.claude/skills`)。**不铺 `.codex/skills/`** | active |
 | D-024 | 2026-08-24 | 吸收 sdlc 为并列的第二个 skill,由 tidykeep 一并分发;其阶段 8 只管技术文档,知识收尾归 tidykeep,分工写进 sdlc/SKILL.md 防止两份真相 | active |
+| D-025 | 2026-08-24 | 新增第三个 skill `blind-test`,解决 agent 自写测试的结构性失效(测试与实现共享上下文 → 测试沦为实现镜像)。两条硬约束:**上下文隔离靠工具权限而非提示词**;**每条测试绑定一条里程碑验收条款**,没有条款就没有测试。变异检查为唯一机械证明。同时修正 sdlc 的时序矛盾——其 6.8 测试设计原排在阶段 5 开发之后,改为必须前置 | active |
 
 ## 墓地(已废弃/已删除,禁止复活)
 

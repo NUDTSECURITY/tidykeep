@@ -28,7 +28,7 @@ export const GITIGNORE_BODY = '.tmp/';
 
 /** 三家 Agent 的项目级 skill 发现目录（官方口径见 STATE.md D-023）。 */
 export const SKILL_ROOTS = ['.claude/skills', '.agents/skills'];
-export const SKILL_NAMES = ['tidykeep', 'sdlc'];
+export const SKILL_NAMES = ['tidykeep', 'sdlc', 'blind-test'];
 
 /** 递归列出 payload 里一个 skill 的全部文件，返回相对该 skill 目录的路径。 */
 function listSkillFiles(skillDir) {
