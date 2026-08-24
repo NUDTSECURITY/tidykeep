@@ -88,7 +88,14 @@ Agent 不得参考、不得重新实现下表中的内容。
 | 2026-08-24 | 项目内独立的 `.claude/skills/neat-freak/` | 已被吸收为 `tidykeep` skill 主体 | `payload/skills/tidykeep/`(D-022) |
 | 2026-08-24 | `.gitattributes` 的 tidykeep 注入块 | 当初为 runtime/githooks 固定 LF,那些文件已不存在 | 无 |
 | 2026-08-24 | `sdlc-skill.zip` | 内容已解包吸收为 `payload/skills/sdlc/` | `payload/skills/sdlc/`(D-024) |
+| 2026-08-24 | `docs/specs/2026-08-24-absorb-neat-freak-design.md` | 该设计已实施完毕,STATE.md 已接管为唯一真相;留着就是第二份设计说明 | 本文件「当前架构与设计」+ D-022/023/024 |
+| 2026-08-24 | `.deepeval/` 空目录与 `.gitignore` 中指向它的规则 | 目录为空、全仓库零引用,规则与目录互为对方存在的唯一理由 | 无 |
+| 2026-08-24 | 仓库内 `.claude/skills/`、`.agents/skills/` 的入库副本 | 与 `payload/skills/` 逐字节相同,34 个副本比源码还多,构成三份真相 | `payload/skills/` 为唯一源;两目录改为 gitignore,用 `init .` 重建 |
 
 ## 待办
 
 - [ ] npm publish 后:README 补安装徽章与 registry 链接,删除"尚未发布"提示行。
+- [ ] **决定 linked worktree 限制的去留**:`assertGitProjectRoot` 仍拒绝在 linked worktree
+      安装,但该限制唯一的理由(`core.hooksPath` 与主仓库共享)已随 D-022 消失。现在写入的
+      全是普通版本控制文件,装进 linked worktree 无技术障碍。要么拆掉限制并改写 D-021,
+      要么补一个当下成立的理由——不能留着一条没有依据的限制。
