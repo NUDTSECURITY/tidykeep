@@ -26,10 +26,9 @@
   我们发布的文件直接覆盖,用户文件只通过标记块触碰。标记孤立或逆序时**整体拒绝**并非零退出,
   绝不吞掉夹在标记间的用户内容。`uninstall` 对内容被改过的文件保守保留并非零退出。
 - 独立非 Git 目录可安装;位于 Git 时只拒绝**仓库子目录**(会装出脱离仓库根的孤岛),
-  linked worktree 允许。入口先 canonicalize,
-  项目内受写路径不得含 symlink。
-- `payload/` 是目标项目模板:`rules.md`(AGENTS.md 协议块)、`STATE.md`(知识模板)、
-  `skills/tidykeep/`、`skills/sdlc/`。
+  linked worktree 允许(D-031)。入口先 canonicalize,项目内受写路径不得含 symlink。
+- `payload/` 是分发源:`rules.md`(AGENTS.md 协议块与路由表)、`STATE.md`(知识模板)、
+  `skills/` 下四个 skill——`tidykeep`、`sdlc`、`blind-test`、`rigor3`。
 - **`tidykeep` skill** 是协议的完整执行流程:六事实面完成合同(代码/运行态/文档/规则/
   记忆/工作区,每面标 verified-current | changed-and-verified | pending | out-of-scope |
   not-applicable)、权限四档、轻量/完整双路径、证据层级与发布状态机、记忆写入边界、
