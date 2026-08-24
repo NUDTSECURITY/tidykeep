@@ -25,7 +25,8 @@
 - 受管资产的所有权只由「内容精确等于当前 payload 发布内容」证明。重跑 `init` 即升级:
   我们发布的文件直接覆盖,用户文件只通过标记块触碰。标记孤立或逆序时**整体拒绝**并非零退出,
   绝不吞掉夹在标记间的用户内容。`uninstall` 对内容被改过的文件保守保留并非零退出。
-- 独立非 Git 目录可安装;位于 Git 时目标必须是主 worktree 根。入口先 canonicalize,
+- 独立非 Git 目录可安装;位于 Git 时只拒绝**仓库子目录**(会装出脱离仓库根的孤岛),
+  linked worktree 允许。入口先 canonicalize,
   项目内受写路径不得含 symlink。
 - `payload/` 是目标项目模板:`rules.md`(AGENTS.md 协议块)、`STATE.md`(知识模板)、
   `skills/tidykeep/`、`skills/sdlc/`。
@@ -68,7 +69,7 @@
 | D-018 | 2026-08-12 | 项目内 journal/staging 一律视为不可信,中断后重规划 | superseded → D-022 |
 | D-019 | 2026-08-12 | 目录锁不按 PID 自动回收,崩溃残留 fail-closed | superseded → D-022 |
 | D-020 | 2026-08-12 | JSONC 回写使用结构感知扫描 | superseded → D-022 |
-| D-021 | 2026-08-12 | 支持独立非 Git 目录;属于 Git 则只允许主 worktree 根 | active |
+| D-021 | 2026-08-12 | 支持独立非 Git 目录;属于 Git 则只允许主 worktree 根 | superseded → D-031 |
 | D-022 | 2026-08-24 | **退回纯 skill 分发**:吸收 neat-freak 为 tidykeep skill 主体,砍掉三家 native hooks、git hooks、LEDGER 台账、manifest/安装事务/目录锁、config.jsonc/allowlist、doctor/status。理由:hooks 占据绝大部分代码与维护成本,而其独有价值(两条写入拦截 + 提交校验)低于其复杂度;协议约束改由 skill 承载。**已知代价:强制力归零,规则全靠 Agent 自觉。** | active |
 | D-023 | 2026-08-24 | skill 只铺 `.claude/skills/` 与 `.agents/skills/` 两处即覆盖三家(官方核实:Codex 只扫 `.agents/skills`;Kimi 两处都读;Claude 读 `.claude/skills`)。**不铺 `.codex/skills/`** | active |
 | D-024 | 2026-08-24 | 吸收 sdlc 为并列的第二个 skill,由 tidykeep 一并分发;其阶段 8 只管技术文档,知识收尾归 tidykeep,分工写进 sdlc/SKILL.md 防止两份真相 | active |
@@ -78,6 +79,7 @@
 | D-028 | 2026-08-24 | 吸收 [MaySudo/rigor3](https://github.com/MaySudo/rigor3) v0.2.0(MIT)为第 4 个 skill,补上库中缺失的**代码层**质量审计。全量吸收不裁剪:SKILL.md 引用全部 11 份 references,删任一份即成死链;尤其不能砍 engine-generation/conformance-cases/scoring-contract——那是它防止模型编造分数的机制(生成临时引擎 → 一致性校验 → 不合格不发布),与 blind-test 的变异检查同源。**本地补丁两处**:description 补中文触发词(上游全英文,中文提问不会命中)、新增四向分工小节;协议正文与 11 份 references 与上游逐字一致,升级时重放这两处即可 | active |
 | D-029 | 2026-08-24 | 因 rigor3 加入而重切重复面:`sdlc` 6.1–6.7 降为流程内轻量把关并声明仓库级审计转 rigor3;`tidykeep` description 删去「清理冗余代码、删除旧版本脚本、体检审计」——**它此前承诺了代码层能力却已不再交付**(方法随旧工作流 3 简化掉了),改为明确指向 rigor3;`blind-test` 与 rigor3 建立衔接:后者评估测试充分性,结论为缺失/无效时转前者去写 | active |
 | D-030 | 2026-08-24 | **skill 改为任务驱动自动触发**:四个 description 原本全写成「当用户**提到** X、Y、Z 时」——把触发绑在用户说出 skill 自己的黑话上,等于必须先知道咒语。全部重写为描述**任务情形**(准备提交时、要写测试时、接手陌生项目时、需求还很模糊时)。并加第二层保险:skill description 是语义匹配可能不命中,而规则文件每次会话必然全量加载,故把路由表写进规则文件——项目级进 AGENTS.md,**用户级进 ~/.claude/CLAUDE.md 与 Codex 全局指令**(存在 AGENTS.override.md 时写它,否则写 AGENTS.md;写错会被无声忽略)。Kimi 用户级指令路径未经现场核实,暂不写 | active |
+| D-031 | 2026-08-24 | **拆掉 linked worktree 安装限制**(取代 D-021 的该条款)。原限制的唯一依据是 `core.hooksPath` 由主仓库 common dir 共享、在 worktree 改写会污染主仓库;hooks 已随 D-022 全部移除,现在写入的只有 AGENTS.md/CLAUDE.md/.gitignore/STATE.md 与 skill 文件,都是该 worktree 自己的工作区文件,跟着其分支走。依据消失就不该留限制。**仍拒绝仓库子目录**——那会装出脱离仓库根的孤岛。已用真实 linked worktree 验证:安装成功,主仓库 hooksPath 与工作区均未被触碰 | active |
 
 ## 墓地(已废弃/已删除,禁止复活)
 
@@ -111,7 +113,5 @@ Agent 不得参考、不得重新实现下表中的内容。
 ## 待办
 
 - [ ] npm publish 后:README 补安装徽章与 registry 链接,删除"尚未发布"提示行。
-- [ ] **决定 linked worktree 限制的去留**:`assertGitProjectRoot` 仍拒绝在 linked worktree
-      安装,但该限制唯一的理由(`core.hooksPath` 与主仓库共享)已随 D-022 消失。现在写入的
-      全是普通版本控制文件,装进 linked worktree 无技术障碍。要么拆掉限制并改写 D-021,
-      要么补一个当下成立的理由——不能留着一条没有依据的限制。
+- [ ] 现场核实 Kimi Code 的**用户级指令文件**路径(skill 发现路径已核实),
+      核实后在 `userRuleFiles()` 中补上,使路由表对 Kimi 也生效。

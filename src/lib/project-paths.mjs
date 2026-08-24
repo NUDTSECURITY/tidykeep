@@ -103,14 +103,18 @@ export function gitProjectContext(target) {
   return { status: 'linked', root, gitDir, gitCommonDir, mainRoot };
 }
 
+/**
+ * 只拒绝仓库子目录——在 packages/app/ 里装出一个孤岛，规则文件与 skill 都会脱离仓库根。
+ *
+ * linked worktree 曾被一并拒绝，理由是 core.hooksPath 由主仓库 common dir 共享，
+ * 在此改写会污染主仓库。hooks 已随 D-022 全部移除，现在写入的只有 AGENTS.md、
+ * CLAUDE.md、.gitignore、STATE.md 和 skill 文件——都是该 worktree 自己的工作区文件，
+ * 跟着它所在的分支走，不触碰任何共享配置。限制的依据消失，故不再拒绝（D-031）。
+ */
 export function assertGitProjectRoot(target, operation = '操作') {
   const context = gitProjectContext(target);
   if (context.status === 'parent') {
     throw new Error(`${operation} 目标位于 Git 仓库子目录:${target};请改用仓库根目录:${context.root}`);
-  }
-  if (context.status === 'linked') {
-    const main = context.mainRoot ?? context.gitCommonDir;
-    throw new Error(`${operation} 拒绝 linked worktree:${target};请改在主仓库根操作:${main}`);
   }
   if (context.status === 'error') throw new Error(`${operation} 无法确认 Git 仓库边界:${context.detail}`);
   return context;
