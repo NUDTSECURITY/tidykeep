@@ -14,9 +14,14 @@ export function parseFrontmatter(text) {
   if (!match) return null;
   const body = match[1];
   const name = body.match(/^name:[ \t]*(.+)$/m)?.[1]?.trim();
-  let description = body.match(/^description:[ \t]*(?!>|\|)(.+)$/m)?.[1]?.trim();
-  if (description === undefined) {
-    const folded = body.match(/^description:[ \t]*[>|]-?[ \t]*\r?\n((?:[ \t]+.*\r?\n?)+)/m);
+  // 先取同行的值再判断，不要用负向先行断言——`description: >-` 会让 [ \t]* 回溯到
+  // 零宽，断言随之通过，结果把折叠标记 ">-" 当成描述正文。
+  const inline = body.match(/^description:[ \t]*(.*)$/m)?.[1]?.trim();
+  let description;
+  if (inline && !/^[>|][-+]?[0-9]*$/.test(inline)) {
+    description = inline;
+  } else {
+    const folded = body.match(/^description:[ \t]*[>|][-+]?[0-9]*[ \t]*\r?\n((?:[ \t]+.*\r?\n?)+)/m);
     if (folded) {
       description = folded[1].split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join(' ');
     }
