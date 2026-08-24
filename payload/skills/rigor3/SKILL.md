@@ -5,12 +5,16 @@ description: >-
   architecture hygiene, and engineering hygiene. Use for an explicit Rigor3 or
   three-hygiene request, a strict repository-wide quality audit, a
   cross-dimensional cleanup plan, or before-and-after verification.
-  当用户提到 rigor3、代码质量审计、代码卫生、架构卫生、工程卫生、三维度评分、
-  给仓库打分、全仓质量体检、技术债盘点、重复实现、死代码、耦合过高、依赖混乱、
-  错误处理不规范、整改计划、整改前后对比时,使用本技能。
+  **当任务是对一个仓库或模块做整体质量判断时使用**,典型场景:刚接手一个陌生项目
+  想知道它什么水平、觉得代码乱/技术债多但说不清烂在哪、大改或重构之前要先摸清底数、
+  想要一份能排优先级的整改清单、整改完想对比前后差异、需要给代码质量一个可复核的
+  结论而不是"看着还行"。用户说"帮我看看这个项目怎么样""这代码质量如何""有哪些
+  技术债""哪里最该改""给它打个分",或提到 rigor3、代码卫生、架构卫生、工程卫生、
+  重复实现、死代码、耦合过高、依赖混乱时,都用本技能。
   Do not use for an ordinary focused review or isolated fix unless the user
-  requests the full triad;不要用于:项目知识/文档/记忆收尾(归 tidykeep)、
-  编写测试用例(归 blind-test)、需求到交付的开发流程(归 sdlc)。
+  requests the full triad;不要用于:只看一个文件或一个函数的普通 review、
+  项目知识/文档/记忆收尾(归 tidykeep)、编写测试用例(归 blind-test)、
+  需求到交付的开发流程(归 sdlc)。
 ---
 
 # Rigor3

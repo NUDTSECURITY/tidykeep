@@ -7,7 +7,7 @@ import { stripBlockText } from '../lib/markers.mjs';
 import { assertNoProjectSymlinks } from '../lib/project-paths.mjs';
 import {
   HASH_BEGIN, HASH_END, MD_BEGIN, MD_END,
-  planInstall, resolveScope, selectSkills, SKILL_ROOTS, summarize,
+  planInstall, resolveScope, selectSkills, SKILL_ROOTS, summarize, userRuleFiles,
 } from './init.mjs';
 
 /** 后序递归删空目录：自顶向下会在遇到尚未清理的子目录时误判非空而提前退出。 */
@@ -81,12 +81,16 @@ export function uninstall(opts = {}) {
     }
   }
 
-  if (scope.protocol) {
-    for (const [rel, begin, end] of [
+  const blockTargets = scope.scope === 'user'
+    ? userRuleFiles(scope.root).map((rel) => [rel, MD_BEGIN, MD_END])
+    : [
       ['AGENTS.md', MD_BEGIN, MD_END],
       ['CLAUDE.md', MD_BEGIN, MD_END],
       ['.gitignore', HASH_BEGIN, HASH_END],
-    ]) {
+    ];
+
+  {
+    for (const [rel, begin, end] of blockTargets) {
       const abs = join(scope.root, rel);
       if (!existsSync(abs)) continue;
       const before = readFileSync(abs, 'utf8');
@@ -105,7 +109,9 @@ export function uninstall(opts = {}) {
         removed.push({ rel, note: '移除', kind: 'block' });
       }
     }
-    if (existsSync(join(scope.root, 'STATE.md'))) kept.push('STATE.md(知识文件,始终保留)');
+    if (scope.protocol && existsSync(join(scope.root, 'STATE.md'))) {
+      kept.push('STATE.md(知识文件,始终保留)');
+    }
   }
 
   const where = scope.scope === 'user' ? `用户级 ${scope.root}` : `项目 ${scope.root}`;

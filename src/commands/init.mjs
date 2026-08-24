@@ -30,6 +30,38 @@ export const CLAUDE_POINTER = `# 项目规则入口(tidykeep)
 export const GITIGNORE_BODY = '.tmp/';
 
 /**
+ * 用户级路由表。skill 的 description 是语义匹配，可能不命中；规则文件则是每次会话
+ * 必然全量加载的，把路由写在这里才谈得上"自动调用"。保持短——它每次会话都占上下文。
+ */
+export const USER_ROUTER = `## Skill 自动路由
+
+本机装有下列 skill。**遇到对应情形主动调用,不要等用户点名**:
+
+| 遇到这种情形 | 调用 |
+|---|---|
+| 要为新功能或缺陷**写测试、改测试、补测试** | \`blind-test\`(先定契约与验收条款,再写实现) |
+| 一段开发工作**告一段落、准备提交**,或用户说"就这样吧/搞定了" | \`tidykeep\`(核对文档漂移、清会话残留、同步 STATE.md) |
+| 要判断**一个仓库或模块的整体质量**、盘技术债、大改前摸底 | \`rigor3\`(三维度 60 控制项打分与整改清单) |
+| 从一个**模糊想法**做出系统、写 PRD、需求没想清楚 | \`sdlc\`(八阶段,问询式澄清需求) |
+
+分工:知识层归 \`tidykeep\`,代码层归 \`rigor3\`,写测试归 \`blind-test\`,长流程归 \`sdlc\`。
+未安装的 skill 忽略对应行即可。`;
+
+/**
+ * 用户级规则文件位置。只写官方核实过的两处：
+ * Claude Code 读 ~/.claude/CLAUDE.md；Codex 全局读 ~/.codex/AGENTS.override.md，
+ * 不存在时才读 ~/.codex/AGENTS.md（override 存在时写 AGENTS.md 会被无声忽略）。
+ * Kimi 的用户级指令路径尚未现场核实，故不写——见 STATE.md 待办。
+ */
+export function userRuleFiles(home) {
+  const codexOverride = join(home, '.codex', 'AGENTS.override.md');
+  return [
+    '.claude/CLAUDE.md',
+    existsSync(codexOverride) ? '.codex/AGENTS.override.md' : '.codex/AGENTS.md',
+  ];
+}
+
+/**
  * 三家 Agent 的 skill 发现目录。用户级与项目级同名，只是根不同——
  * Codex 只扫 .agents/skills，Claude 读 .claude/skills，Kimi 两处都读。
  */
@@ -62,16 +94,29 @@ export function selectSkills(wanted) {
 }
 
 /** 计划要写的文件。protocol=true 时附带 tidykeep 协议文件（仅项目级有意义）。 */
-export function planInstall(skills, { protocol }) {
+export function planInstall(skills, { protocol, root, scope }) {
   const writes = [];
   for (const { name, dir } of skills) {
     for (const file of listSkillFiles(dir)) {
       const data = readFileSync(join(dir, file));
-      for (const root of SKILL_ROOTS) {
-        writes.push({ rel: `${root}/${name}/${file}`, data, kind: 'skill' });
+      for (const skillRoot of SKILL_ROOTS) {
+        writes.push({ rel: `${skillRoot}/${name}/${file}`, data, kind: 'skill' });
       }
     }
   }
+
+  if (scope === 'user') {
+    // 路由表写进用户级规则文件——否则装了 skill 也只能靠语义匹配碰运气。
+    for (const rel of userRuleFiles(root)) {
+      writes.push({
+        rel,
+        block: { begin: MD_BEGIN, end: MD_END, body: USER_ROUTER },
+        kind: 'block',
+      });
+    }
+    return writes;
+  }
+
   if (!protocol) return writes;
 
   writes.push({
