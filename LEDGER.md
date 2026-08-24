@@ -14,12 +14,13 @@
 
 ## bin/tidykeep.mjs
 
-- 最后核对: 2026-08-12
+- 最后核对: 2026-08-24
 - TODO:
 - DONE:
   - [x] 2026-08-12 CLI 入口:init/uninstall/status/doctor/enable-githooks 分发,parseArgs 零依赖
   - [x] 2026-08-12 严格校验命令选项与目标路径,补齐 doctor/升级/卸载返回码语义
   - [x] 2026-08-12 裸 --help 正常返回,拒绝命令与 --version 混用及多余位置参数
+  - [x] 2026-08-24 头部注释补回 doctor 子命令,与 HELP 文本和实际分发保持一致
 
 ## src/commands/init.mjs
 

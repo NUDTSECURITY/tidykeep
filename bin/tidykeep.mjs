@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tidykeep CLI 入口:npx tidykeep <init|uninstall|status|enable-githooks> [dir] [选项]
+// tidykeep CLI 入口:npx tidykeep <init|uninstall|status|doctor|enable-githooks> [dir] [选项]
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
