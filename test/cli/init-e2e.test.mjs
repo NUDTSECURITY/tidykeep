@@ -68,6 +68,24 @@ test('init:重跑幂等,不重复注入标记块', () => {
   assert.equal(first.match(/tidykeep:begin/g).length, 1);
 });
 
+// 验收条款(D-013):payload 内容变化时,重跑 init 必须把目标文件刷回发布内容。
+// 由变异检查发现——此前把 `before && before.equals(data)` 削成 `before` 也全绿,
+// 说明「升级」这条唯一的产品承诺当时没有任何断言守着。
+test('init:目标文件内容陈旧时重跑刷新回发布内容', () => {
+  const dir = makeTempDir('tk-upgrade-');
+  gitInit(dir);
+  assert.equal(run(['init', dir]).status, 0);
+
+  const installed = join(dir, '.claude/skills/tidykeep/SKILL.md');
+  const shipped = readFileSync(installed, 'utf8');
+  writeFileSync(installed, '# 冒充旧版本\n');
+
+  const again = run(['init', dir]);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(readFileSync(installed, 'utf8'), shipped, '陈旧文件必须被刷新');
+  assert.match(again.stdout, /刷新/);
+});
+
 test('init:保留用户既有 AGENTS.md 与 .gitignore 内容', () => {
   const dir = makeTempDir('tk-keep-');
   gitInit(dir);
