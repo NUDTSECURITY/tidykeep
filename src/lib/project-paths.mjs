@@ -110,7 +110,7 @@ export function assertGitProjectRoot(target, operation = '操作') {
   }
   if (context.status === 'linked') {
     const main = context.mainRoot ?? context.gitCommonDir;
-    throw new Error(`${operation} 拒绝 linked worktree:${target};core.hooksPath 与主仓库共享，请改在主仓库操作:${main}`);
+    throw new Error(`${operation} 拒绝 linked worktree:${target};请改在主仓库根操作:${main}`);
   }
   if (context.status === 'error') throw new Error(`${operation} 无法确认 Git 仓库边界:${context.detail}`);
   return context;

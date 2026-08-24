@@ -1,6 +1,5 @@
 node_modules/
 *.tgz
-.deepeval/
 
 # 本仓库特有:自装产物,内容与 payload/skills/ 逐字节相同。
 # 普通项目不该忽略它们——.agents/skills/ 入库正是为了团队共享;
