@@ -2,6 +2,13 @@ node_modules/
 *.tgz
 .deepeval/
 
+# 本仓库特有:自装产物,内容与 payload/skills/ 逐字节相同。
+# 普通项目不该忽略它们——.agents/skills/ 入库正是为了团队共享;
+# 只有 tidykeep 自己因为同时是源头,入库就成了三份真相。
+# 需要时用 `node bin/tidykeep.mjs init .` 重建。
+.claude/skills/
+.agents/skills/
+
 # >>> tidykeep >>>
 .tmp/
 # <<< tidykeep <<<
