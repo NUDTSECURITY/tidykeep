@@ -111,6 +111,3 @@ Agent 不得参考、不得重新实现下表中的内容。
 
 ## 待办
 
-- [ ] npm publish 后:README 补安装徽章与 registry 链接,删除"尚未发布"提示行。
-- [ ] 现场核实 Kimi Code 的**用户级指令文件**路径(skill 发现路径已核实),
-      核实后在 `userRuleFiles()` 中补上,使路由表对 Kimi 也生效。
