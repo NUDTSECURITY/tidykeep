@@ -1,7 +1,7 @@
 {
   "name": "tidykeep",
   "version": "0.1.0",
-  "description": "跨 Agent(Claude Code / Codex / Kimi Code)的项目知识保鲜协议分发器:铺设 tidykeep 与 sdlc 两个 Agent Skill、AGENTS.md 唯一规则入口与 STATE.md 设计真相。靠约定执行,不安装任何 hook。",
+  "description": "个人 Agent Skill 库:一条命令把全部自维护 skill 装到 Claude Code / Codex / Kimi Code 都能发现的位置,换环境不必逐个下载。",
   "type": "module",
   "bin": {
     "tidykeep": "bin/tidykeep.mjs"
@@ -17,22 +17,20 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1",
-    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1"
+    "validate": "node bin/tidykeep.mjs doctor"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NUDTSECURITY/tidykeep.git"
   },
   "keywords": [
-    "agents-md",
     "agent-skills",
+    "skill-library",
     "claude-code",
     "codex",
     "kimi",
-    "skill",
-    "knowledge-management",
-    "code-hygiene"
+    "agents-md",
+    "dotfiles"
   ],
   "license": "MIT"
 }

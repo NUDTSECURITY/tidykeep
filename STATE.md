@@ -5,18 +5,23 @@
 
 ## 当前架构与设计
 
-本仓库是 **tidykeep** 本身:面向 Claude Code、Codex、Kimi Code 的项目知识保鲜协议。
-交付形态是 npm 包,当前 registry 尚未发布,可直接运行源码 CLI;要求 Node ≥ 20.11,
-运行时零第三方依赖。
+本仓库是**个人 Agent Skill 库 + 安装器**。目标:换机器、换环境时 clone 一次、跑一条命令,
+全部自维护 skill 就位,不必逐个下载。交付形态是 npm 包,registry 尚未发布,可直接跑源码 CLI;
+要求 Node ≥ 20.11,运行时零第三方依赖。
 
-- **本工具是协议分发器,不是执行器。** 它把两个 skill 和一份规则块铺进目标项目,
-  之后的一切靠 Agent 遵守约定。**不安装任何 hook,不拦截任何操作,没有强制力。**
-- `bin/tidykeep.mjs` 只分发 `init` 与 `uninstall` 两个命令;`src/commands/` 实现,
-  `src/lib/` 只剩三件必需品:`markers.mjs`(标记块严格配对)、`fs-safe.mjs`(原子写)、
-  `project-paths.mjs`(路径与 Git 边界)。
-- `init` 铺设:`.claude/skills/{tidykeep,sdlc}/` 与 `.agents/skills/{tidykeep,sdlc}/`
-  两套 skill 副本;向 `AGENTS.md`(规则全文)、`CLAUDE.md`(`@AGENTS.md` 指针)、
-  `.gitignore`(`.tmp/`)upsert 标记块;`STATE.md` 仅当不存在时创建,**永不覆盖**。
+- **本工具是 skill 分发器,不是执行器。** 它把 `payload/skills/` 下的全部 skill 铺到三家
+  Agent 都能发现的位置。**不安装任何 hook,不拦截任何操作,没有强制力。**
+- `bin/tidykeep.mjs` 分发 `list` / `doctor` / `init` / `uninstall`;`src/commands/` 实现,
+  `src/lib/` 四件:`markers.mjs`(标记块严格配对)、`fs-safe.mjs`(原子写)、
+  `project-paths.mjs`(路径与 Git 边界)、`skill-validate.mjs`(格式校验)。
+- **skill 目录自动发现**:新增 skill 只需放进 `payload/skills/<name>/`,不改任何代码。
+- **两种作用域。默认用户级**(`~/.claude/skills/` 与 `~/.agents/skills/`),对所有项目生效——
+  这是个人库的主用法。`--project <dir>` 装到项目并额外注入 tidykeep 协议:`AGENTS.md`
+  规则块、`CLAUDE.md` 的 `@AGENTS.md` 指针、`.gitignore` 的 `.tmp/`,以及 `STATE.md`
+  (仅当不存在时创建,**永不覆盖**)。`--skills a,b` 可选装子集。
+- **安装前 fail-closed 校验 skill 格式**(name 等于目录名、description ≤1024、
+  SKILL.md <500 行/<24KB、相对链接可达、references 无孤儿)。格式错的 skill 会被 Agent
+  **静默忽略**——不报错只是不生效,所以必须在安装前挡住。`doctor` 是该校验的只读入口。
 - 受管资产的所有权只由「内容精确等于当前 payload 发布内容」证明。重跑 `init` 即升级:
   我们发布的文件直接覆盖,用户文件只通过标记块触碰。标记孤立或逆序时**整体拒绝**并非零退出,
   绝不吞掉夹在标记间的用户内容。`uninstall` 对内容被改过的文件保守保留并非零退出。
@@ -35,9 +40,9 @@
   测试会退化为实现的镜像。四项完成合同——契约(里程碑验收条款)、隔离(工具权限而非提示词)、
   经济(一条条款最多一个测试)、证伪力(变异检查)。变异检查是其中唯一能机械证明测试有效的手段。
 - 知识层只有 `STATE.md` 一个文件。逐文件变更简史交回 `git log`。
-- 测试覆盖标记块边界、原子写、路径与 Git 边界、init/uninstall e2e,以及 skill 资产
-  格式校验(name 等于目录名、description 长度、SKILL.md 体量预算、references 链接可达)。
-- 本仓库已自装 tidykeep(狗粮)。
+- **没有测试套件**(D-026)。原 35 个测试已删除,其中唯一不可替代的 skill 格式校验已移植进
+  `skill-validate.mjs`,由 `doctor` 与每次 `init` 强制执行,CI 也只跑它。
+- 本仓库已自装(狗粮),项目级安装。
 
 ## 设计决策记录(ADR-lite)
 
@@ -69,6 +74,9 @@
 | D-024 | 2026-08-24 | 吸收 sdlc 为并列的第二个 skill,由 tidykeep 一并分发;其阶段 8 只管技术文档,知识收尾归 tidykeep,分工写进 sdlc/SKILL.md 防止两份真相 | active |
 | D-025 | 2026-08-24 | 新增第三个 skill `blind-test`,解决 agent 自写测试的结构性失效(测试与实现共享上下文 → 测试沦为实现镜像)。两条硬约束:**上下文隔离靠工具权限而非提示词**;**每条测试绑定一条里程碑验收条款**,没有条款就没有测试。变异检查为唯一机械证明。同时修正 sdlc 的时序矛盾——其 6.8 测试设计原排在阶段 5 开发之后,改为必须前置 | active |
 
+| D-026 | 2026-08-24 | **重定位为个人 Agent Skill 库**:安装器从「装 tidykeep 协议」改为「装库里全部 skill」,skill 目录自动发现,**默认用户级安装**(换项目不必重装),`--project` 保留原协议注入。同时按用户要求删除测试套件——把其中唯一不可替代的 skill 格式校验移植进 CLI 并 fail-closed,使该保证不依赖测试而存在 | active |
+| D-027 | 2026-08-24 | 三个 skill 的边界改为**三向声明**:每个 SKILL.md 都写明另外两个管什么,任一被触发都能自行裁决;并给 sdlc 补上此前缺失的「不要用于」排除条款(它原本范围写得极宽,会抢走改几行代码这类请求) | active |
+
 ## 墓地(已废弃/已删除,禁止复活)
 
 Agent 不得参考、不得重新实现下表中的内容。
@@ -94,7 +102,9 @@ Agent 不得参考、不得重新实现下表中的内容。
 | 2026-08-24 | `sdlc-skill.zip` | 内容已解包吸收为 `payload/skills/sdlc/` | `payload/skills/sdlc/`(D-024) |
 | 2026-08-24 | `docs/specs/2026-08-24-absorb-neat-freak-design.md` | 该设计已实施完毕,STATE.md 已接管为唯一真相;留着就是第二份设计说明 | 本文件「当前架构与设计」+ D-022/023/024 |
 | 2026-08-24 | `.deepeval/` 空目录与 `.gitignore` 中指向它的规则 | 目录为空、全仓库零引用,规则与目录互为对方存在的唯一理由 | 无 |
-| 2026-08-24 | 仓库内 `.claude/skills/`、`.agents/skills/` 的入库副本 | 与 `payload/skills/` 逐字节相同,34 个副本比源码还多,构成三份真相 | `payload/skills/` 为唯一源;两目录改为 gitignore,用 `init .` 重建 |
+| 2026-08-24 | 仓库内 `.claude/skills/`、`.agents/skills/` 的入库副本 | 与 `payload/skills/` 逐字节相同,34 个副本比源码还多,构成三份真相 | `payload/skills/` 为唯一源;两目录改为 gitignore,用 `init --project .` 重建 |
+| 2026-08-24 | **整个 `test/` 目录**(35 个测试:markers、init/uninstall e2e、npm pack、skill-assets)与 `package.json` 的 test/test:coverage 脚本、CI 的 coverage job | 用户判定测试对个人 skill 库不必要。**代价已知**:markers 的 15 个用例守着「绝不吞掉标记块之间用户内容」这条承诺,现在无人守;init/uninstall 的行为回归也无人守 | skill 格式校验移植进 `src/lib/skill-validate.mjs`,由 `doctor` 与每次 `init` fail-closed 执行;其余保证转为无自动验证 |
+| 2026-08-24 | `SKILL_NAMES` 硬编码列表 | 个人库应当放进目录即生效,不该改代码 | `discoverSkills()` 自动扫描 `payload/skills/` |
 
 ## 待办
 

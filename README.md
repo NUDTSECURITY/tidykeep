@@ -1,103 +1,106 @@
-# tidykeep
+# tidykeep — 个人 Agent Skill 库
 
-让项目只保留当前有效的代码、文档和设计。支持 Claude Code、Codex、Kimi Code，
-要求 Node.js >= 20.11，运行时零第三方依赖。
+我自己维护的 Agent Skill 集合，配一个安装器。**换机器、换环境时 clone 一次、跑一条命令，
+全部 skill 就位**，不用再去一个个下载。
 
-**tidykeep 是协议分发器，不是执行器。** 它把两个 skill 和一份规则块铺进你的项目，
-之后靠 Agent 遵守约定。它**不安装任何 hook，不拦截任何操作，没有强制力**——
-规则被违反时由人或 code review 发现，不要指望工具兜底。
+支持 Claude Code、Codex、Kimi Code。要求 Node.js >= 20.11，运行时零第三方依赖。
 
-## 安装
-
-当前尚未发布到 npm registry，请从源码安装：
+## 快速开始
 
 ```bash
 git clone https://github.com/NUDTSECURITY/tidykeep.git
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project
+cd tidykeep
+
+node bin/tidykeep.mjs list     # 看看库里有什么
+node bin/tidykeep.mjs init     # 全装到用户级，对所有项目生效
 ```
 
-发布后可改用：
+发布到 npm 后可省去 clone：`npx tidykeep init`。
 
-```bash
-npx tidykeep init /path/to/project
-```
+## 库里有什么
 
-先看会发生什么：
-
-```bash
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project --dry-run
-```
-
-独立目录可安装；若目录属于 Git 仓库，目标必须是主 worktree 根。
-
-## 装了什么
-
-| 路径 | 内容 |
+| skill | 什么时候用它 |
 |---|---|
-| `.claude/skills/{tidykeep,sdlc,blind-test}/` | 三个 skill，供 Claude Code 与 Kimi Code 发现 |
-| `.agents/skills/{tidykeep,sdlc,blind-test}/` | 同上，供 Codex 与 Kimi Code 发现 |
-| `AGENTS.md` | tidykeep 协议块（标记块内） |
-| `CLAUDE.md` | `@AGENTS.md` 指针（标记块内） |
-| `.gitignore` | `.tmp/` 草稿区（标记块内） |
-| `STATE.md` | 知识文件模板，**仅当不存在时创建，永不覆盖** |
+| **`tidykeep`** | 知识与规范收尾。让代码、文档、Agent 规则、记忆、工作区彼此一致，下一个人只找到唯一现役答案。六个事实面各自标状态，不允许把未验证写成完成。<br>触发：收尾、体检审计、文档和代码对不上、整理记忆、交接、洁癖 |
+| **`sdlc`** | 八阶段开发流程：需求澄清 → 价值评估 → 方案设计 → PRD → 开发 → 质量验证 → 修复回归 → 文档维护。强制按序，跳步会被拒绝。<br>触发：从零做个 X、写 PRD、需求分析、管理开发流程 |
+| **`blind-test`** | 让测试真的能证伪。同一个模型先写实现再写测试时，测试会退化成把实现抄一遍。要求契约先行、测试作者与实现者上下文隔离、每条测试绑定一条里程碑验收条款、变异检查证明测试能挂。<br>触发：设计测试用例、补测试、TDD、测试写得太假、精简测试 |
 
-只铺 `.claude/skills/` 和 `.agents/skills/` 两处就覆盖三家：Codex 只扫 `.agents/skills`，
+三者边界写在各自的 SKILL.md 里（三向声明，任一被触发都能自己裁决）：
+知识收尾归 tidykeep，长流程与技术文档归 sdlc，测试怎么写归 blind-test。
+
+## 装到哪里
+
+**用户级（默认）** —— 对所有项目生效，个人使用选这个：
+
+```
+~/.claude/skills/<name>/      Claude Code 与 Kimi Code 从这读
+~/.agents/skills/<name>/      Codex 与 Kimi Code 从这读
+```
+
+**项目级** —— 随仓库分发给团队：
+
+```bash
+node bin/tidykeep.mjs init --project /path/to/project
+```
+
+除 skill 外还会注入 tidykeep 协议：`AGENTS.md` 规则块、`CLAUDE.md` 的 `@AGENTS.md`
+指针、`.gitignore` 的 `.tmp/`，以及 `STATE.md`（仅当不存在时创建，**永不覆盖**）。
+
+只铺 `.claude/skills` 和 `.agents/skills` 两处就覆盖三家：Codex 只扫 `.agents/skills`，
 Claude Code 读 `.claude/skills`，Kimi Code 两处都读。
 
-## 三个 skill
+## 常用命令
 
-**`tidykeep`** —— 知识与规范收尾。六个事实面（代码、运行态、文档、规则、记忆、工作区）
-各自标明状态，不允许把未验证写成完成；权限分四档，检查深度可扩大但操作权限不扩大；
-轻量路径服务个人项目，完整路径服务有发布流程的项目。触发词：`tidykeep`、`洁癖`、
-初始化、收尾、体检审计，或「把文档和记忆整理一下」这类意图。
+```bash
+tidykeep list                          # 库里有哪些 skill
+tidykeep doctor                        # 只校验格式，不写任何文件
 
-**`sdlc`** —— 需求澄清 → 价值评估 → 方案设计 → PRD → 开发 → 质量验证 → 修复回归 →
-文档维护，八阶段强制按序推进。它只管技术文档本身，项目级知识收尾仍归 tidykeep。
+tidykeep init                          # 全装到用户级
+tidykeep init --skills blind-test      # 只装其中几个
+tidykeep init --dry-run                # 先看会发生什么
+tidykeep init --project .              # 装到当前项目（含协议文件）
 
-**`blind-test`** —— 让测试真的能证伪。同一个模型先写实现再写测试时，测试会退化成把实现
-抄一遍：实现里把 `<=` 写成 `<`，测试的边界值也跟着挑那个不会暴露差异的。这不是态度问题，
-是共享上下文的结构问题。它要求契约先行、测试作者与实现者上下文隔离（靠工具权限而非提示词）、
-**每条测试绑定一条里程碑验收条款**（没有条款就没有测试，一条条款最多一个测试），
-最后用变异检查机械证明测试能挂——存活的变异就是假测试。触发词：`blind-test`、盲测、
-测试写得太假、补测试、精简测试用例。
+tidykeep uninstall                     # 从用户级卸载
+tidykeep uninstall --skills sdlc       # 只卸其中几个
+```
+
+## 往库里加 skill
+
+把目录放进 `payload/skills/<name>/`，**不用改任何代码**——安装器自动发现。
+
+```
+payload/skills/<name>/
+├── SKILL.md          必需：YAML frontmatter + 正文
+├── references/       可选：按需加载的细节
+└── ...
+```
+
+加完跑 `tidykeep doctor` 验一遍。它会挡住这些问题（装错格式的 skill 会被 Agent
+**静默忽略**——不报错，只是不生效，所以安装前就 fail-closed）：
+
+- `name` 必须等于目录名，且符合规范命名（小写字母数字 + 单连字符）
+- `description` 非空且 ≤ 1024 字符
+- `SKILL.md` < 500 行 / < 24 KB，超了应下沉到 `references/`
+- 正文里的相对链接全部可达
+- `references/` 下没有正文引用不到的孤儿文件
 
 ## 重复安装
 
-再次运行 `init` 即升级：
-
-- 我们发布的 skill 文件直接覆盖；`STATE.md` 与标记块外的一切内容原样保留；
-- 标记块孤立或逆序（用户误删、merge 冲突）时**整体拒绝**并返回非零，绝不吞掉夹在
-  标记之间的内容——请先手工修好标记再重跑；
-- 内容未变时不写盘，重跑输出「无变化」。
+再跑一次 `init` 即升级：库里的文件直接覆盖，内容没变则不写盘（输出「无变化」）。
+项目级模式下，标记块孤立或逆序时**整体拒绝**并返回非零，绝不吞掉夹在标记之间的内容——
+请先手工修好标记再重跑。
 
 ## 卸载
 
-```bash
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs uninstall /path/to/project
-```
+只删能证明是本库发布的东西：skill 文件内容需精确等于当前版本，标记块需严格配对。
+任何一项无法证明所有权就保守保留并返回非零。项目级的 `STATE.md` **始终保留**——
+它是你的知识，不是安装物。
 
-只删能证明是自己发布的东西：skill 文件内容需精确等于当前版本，标记块需严格配对。
-任何一项无法证明所有权就保守保留并返回非零。`STATE.md` **始终保留**——它是你的知识，
-不是我们的安装物。
+## 注意
 
-## 工作方式
-
-- `AGENTS.md`：统一规则入口，Claude Code 通过 `CLAUDE.md` 的 `@AGENTS.md` 导入；
-- `STATE.md`：当前设计的唯一真相 + 决策记录 + 已废弃墓地；
-- `.tmp/`：项目内一次性脚本目录，用完即删，禁止写系统 `/tmp`；
-- 变更简史不单独立账——它在 `git log` 里，那里更准也不会腐烂。
-
-Agent 的工作边界到本地 commit；push、tag 和 publish 由人决定。
-
-## 从 0.1.0 之前的版本升级
-
-**存在断层。** 旧版本会在项目里安装 `.tidykeep/`（vendored runtime、githooks、
-config.jsonc、allowlist）、三家 native hooks 配置、`~/.kimi-code/config.toml`
-全局块，以及 `LEDGER.md`。新版本**不认识这些资产**，直接装新版会留下孤儿文件。
-
-正确顺序：先用**旧版本**的 `uninstall` 卸干净（必要时加 `--purge`），确认
-`.tidykeep/` 已消失、`git config core.hooksPath` 已 unset、Kimi 全局块已移除，
-再安装新版本。`LEDGER.md` 不会被自动迁移——其中仍有效的待办请手工并入 `STATE.md`。
+- 改了 skill 之后**要新开会话**。Agent 在会话启动时才扫描 skill 目录读取
+  `name` 和 `description`；正文是激活后才读。改触发词不重开会话完全不生效。
+- 这里没有任何 hook，不拦截任何操作。skill 是提示词，靠 Agent 遵守。
 
 ## License
 

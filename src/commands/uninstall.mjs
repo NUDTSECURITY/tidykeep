@@ -1,18 +1,16 @@
-// `tidykeep uninstall`：剥掉标记块、移除我们自己发布的 skill 文件，保留知识与用户内容。
-// 所有权只由「内容精确等于当前 payload 发布内容」证明；被用户改过的文件一律保留并报告。
+// `tidykeep uninstall`：移除本库发布的 skill 与协议标记块，保留用户内容与知识文件。
+// 所有权只由「内容精确等于当前库中内容」证明；被改过的文件一律保留并非零退出。
 import { existsSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { atomicWriteFile } from '../lib/fs-safe.mjs';
 import { stripBlockText } from '../lib/markers.mjs';
-import { assertNoProjectSymlinks, canonicalProjectRoot } from '../lib/project-paths.mjs';
+import { assertNoProjectSymlinks } from '../lib/project-paths.mjs';
 import {
-  HASH_BEGIN, HASH_END, MD_BEGIN, MD_END, planInstall, SKILL_NAMES, SKILL_ROOTS, summarize,
+  HASH_BEGIN, HASH_END, MD_BEGIN, MD_END,
+  planInstall, resolveScope, selectSkills, SKILL_ROOTS, summarize,
 } from './init.mjs';
 
-/**
- * 后序递归删空目录：先清子目录，再判断自身。只能这样做——自顶向下会在遇到
- * 尚未清理的子目录时误判为「非空」而提前退出。返回自身是否已被删除。
- */
+/** 后序递归删空目录：自顶向下会在遇到尚未清理的子目录时误判非空而提前退出。 */
 function pruneEmptyTree(abs) {
   let entries;
   try { entries = readdirSync(abs); } catch { return false; }
@@ -27,7 +25,6 @@ function pruneEmptyTree(abs) {
   } catch { return false; }
 }
 
-/** 从 startAbs 起向上删空目录，止步于非空目录或项目根。 */
 function pruneUpward(root, startAbs) {
   let current = startAbs;
   while (current !== root && current.startsWith(root)) {
@@ -39,10 +36,12 @@ function pruneUpward(root, startAbs) {
   }
 }
 
-export function uninstall(dir, opts = {}) {
-  let root;
+export function uninstall(opts = {}) {
+  let scope;
+  let skills;
   try {
-    root = canonicalProjectRoot(dir ?? '.');
+    scope = resolveScope(opts);
+    skills = selectSkills(opts.skills);
   } catch (error) {
     console.error(`[tidykeep] ${error.message}`);
     return 1;
@@ -50,8 +49,8 @@ export function uninstall(dir, opts = {}) {
 
   let plan;
   try {
-    plan = planInstall(root);
-    assertNoProjectSymlinks(root, plan.map((w) => w.rel));
+    plan = planInstall(skills, scope);
+    if (scope.scope === 'project') assertNoProjectSymlinks(scope.root, plan.map((w) => w.rel));
   } catch (error) {
     console.error(`[tidykeep] ${error.message}`);
     return 1;
@@ -61,64 +60,59 @@ export function uninstall(dir, opts = {}) {
   const kept = [];
   let problems = 0;
 
-  // 1. skill 文件：内容精确匹配才删。
-  const shipped = new Map(
-    plan.filter((w) => w.kind === 'skill').map((w) => [w.rel, w.data]),
-  );
+  const shipped = new Map(plan.filter((w) => w.kind === 'skill').map((w) => [w.rel, w.data]));
   for (const [rel, data] of shipped) {
-    const abs = join(root, rel);
+    const abs = join(scope.root, rel);
     if (!existsSync(abs)) continue;
     if (!readFileSync(abs).equals(data)) {
-      kept.push(`${rel}(内容与发布版本不一致,保留)`);
+      kept.push(`${rel}(内容与库中版本不一致,保留)`);
       problems += 1;
       continue;
     }
     unlinkSync(abs);
     removed.push({ rel, note: '移除', kind: 'skill' });
   }
-  for (const skillRoot of SKILL_ROOTS) {
-    for (const name of SKILL_NAMES) {
-      const abs = join(root, skillRoot, name);
+  for (const root of SKILL_ROOTS) {
+    for (const { name } of skills) {
+      const abs = join(scope.root, root, name);
       if (existsSync(abs) && statSync(abs).isDirectory() && pruneEmptyTree(abs)) {
-        // skill 目录已空并删除，继续向上清 .claude/skills、.claude 这类空壳。
-        pruneUpward(root, join(root, skillRoot));
+        pruneUpward(scope.root, join(scope.root, root));
       }
     }
   }
 
-  // 2. 标记块：严格配对才剥。
-  for (const [rel, begin, end] of [
-    ['AGENTS.md', MD_BEGIN, MD_END],
-    ['CLAUDE.md', MD_BEGIN, MD_END],
-    ['.gitignore', HASH_BEGIN, HASH_END],
-  ]) {
-    const abs = join(root, rel);
-    if (!existsSync(abs)) continue;
-    const before = readFileSync(abs, 'utf8');
-    const result = stripBlockText(before, begin, end);
-    if (result.status === 'unpaired') {
-      kept.push(`${rel}(标记不成对,拒绝改写)`);
-      problems += 1;
-      continue;
+  if (scope.protocol) {
+    for (const [rel, begin, end] of [
+      ['AGENTS.md', MD_BEGIN, MD_END],
+      ['CLAUDE.md', MD_BEGIN, MD_END],
+      ['.gitignore', HASH_BEGIN, HASH_END],
+    ]) {
+      const abs = join(scope.root, rel);
+      if (!existsSync(abs)) continue;
+      const before = readFileSync(abs, 'utf8');
+      const result = stripBlockText(before, begin, end);
+      if (result.status === 'unpaired') {
+        kept.push(`${rel}(标记不成对,拒绝改写)`);
+        problems += 1;
+        continue;
+      }
+      if (!result.stripped) continue;
+      if (result.text.trim()) {
+        atomicWriteFile(abs, Buffer.from(result.text), { mode: 0o644 });
+        removed.push({ rel: `${rel} 的 tidykeep 块`, note: '剥离', kind: 'block' });
+      } else {
+        unlinkSync(abs);
+        removed.push({ rel, note: '移除', kind: 'block' });
+      }
     }
-    if (!result.stripped) continue;
-    if (result.text.trim()) {
-      atomicWriteFile(abs, Buffer.from(result.text), { mode: 0o644 });
-      removed.push({ rel: `${rel} 的 tidykeep 块`, note: '剥离', kind: 'block' });
-    } else {
-      // 整个文件本来就只有我们注入的块 → 连文件一起删。
-      unlinkSync(abs);
-      removed.push({ rel, note: '移除', kind: 'block' });
-    }
+    if (existsSync(join(scope.root, 'STATE.md'))) kept.push('STATE.md(知识文件,始终保留)');
   }
 
-  // 3. STATE.md：知识文件，永远保留。
-  if (existsSync(join(root, 'STATE.md'))) kept.push('STATE.md(知识文件,始终保留)');
-
-  console.log(`[tidykeep] 已卸载:${root}`);
+  const where = scope.scope === 'user' ? `用户级 ${scope.root}` : `项目 ${scope.root}`;
+  console.log(`[tidykeep] 已卸载:${where}`);
   for (const line of summarize(removed)) console.log(`  ${line}`);
   for (const k of kept) console.log(`  保留  ${k}`);
-  if (!removed.length && !kept.length) console.log('  (未发现 tidykeep 安装痕迹)');
+  if (!removed.length && !kept.length) console.log('  (未发现本库的安装痕迹)');
   if (problems) {
     console.error(`[tidykeep] ${problems} 项无法证明所有权,已保守保留,请人工确认后删除。`);
     return 1;
