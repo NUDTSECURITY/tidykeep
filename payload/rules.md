@@ -1,54 +1,64 @@
 # tidykeep 协议(本项目 Agent 规则入口)
 
 > 本项目启用 tidykeep:一套防止旧代码、旧文档、旧设计残留的工作协议。
-> **本文件是所有 AI Agent(Claude Code / Codex / Kimi 等)的唯一规则入口。**
-> 违规操作会被两层拦截:各 Agent 的 native hooks + 对所有人生效的 git hooks。
+> **本文件是所有 AI Agent(Claude Code / Codex / Kimi Code 等)的唯一规则入口。**
 
-## 三个核心文件
+## 两个核心文件
 
 | 文件 | 作用 | 谁维护 |
 |---|---|---|
 | `AGENTS.md`(本文件) | 规则入口,长期稳定 | 人 |
 | `STATE.md` | **当前设计的唯一真相** + 决策记录 + 已废弃墓地 | Agent 每次设计变更时 |
-| `LEDGER.md` | 每个受管代码/文档文件的 TODO / DONE 台账 | Agent 每次任务收尾时 |
 
-## 任务循环(每次任务必须遵守)
+变更简史不单独立账——它在 `git log` 里,那里更准也不会腐烂。
 
-**开工前:** 读 `STATE.md`(以"当前架构与设计"为唯一事实依据)与 `LEDGER.md` 中相关文件条目;**禁止**参考墓地中已废弃的方案,禁止复活已删除的旧实现。
+## 任务循环
 
-**干活时:** 优先修改现有文件,**禁止**创建 `_v2/_old/_new/_final/_backup/copy/副本` 等历史副本命名(hooks 当场拦截);只是参数不同时用 CLI 参数或配置文件,不复制脚本;一次性/实验/验证脚本统一放**项目内**配置 `SCRATCH_DIR` 指定的草稿区(默认 `.tmp/`,已 gitignore),**禁止**写系统 `/tmp`、`~/tmp`、`~/.tmp`、`$TMPDIR`(hooks 拦截),脚本完成使命后**立即删除**;不再使用的文件要**删除**(历史在 git,随时可找回)并在 `STATE.md` 墓地登记;文档必须反映现状——过期段落当场更新或删除,禁止"新版方案""临时做法"这类必然腐烂的措辞。
+**开工前:** 读 `STATE.md`,以「当前架构与设计」为唯一事实依据。**禁止**参考墓地中已废弃的
+方案,禁止复活已删除的旧实现。
 
-**收尾时(三件事,缺一不可,Stop hook 与 pre-commit 会检查):** Stop hook 检测到受管变化时会给出
-有界变更事实并明确触发 `$tidykeep` 收尾同步;Agent 必须查看实际 diff 后判断,不得把 Hook 信号当语义结论。
-1. **更新 `LEDGER.md`**:完成项从 TODO 移入 DONE(附日期);新待办登记进 TODO;刷新相关文件的"最后核对"。
-2. **同步 `STATE.md`**:设计/架构/接口有变则更新"当前架构与设计",被取代的决策标记 `superseded → 新决策`;删除的文件登记进墓地。
-3. **详细提交**:按下方 Commit 规范(commit-msg hook 校验)。
+**干活时:** 优先修改现有文件,**禁止**创建 `_v2` / `_old` / `_new` / `_final` / `_backup` /
+`copy` / `副本` 等历史副本命名;只是参数不同时用 CLI 参数或配置文件,不复制脚本。
+一次性/实验/验证脚本统一放**项目内**草稿区(默认 `.tmp/`,须 gitignore),**禁止**写系统
+`/tmp`、`~/tmp`、`$TMPDIR`,脚本完成使命后**立即删除**。不再使用的文件要**删除**
+(历史在 git,随时可找回)并在 `STATE.md` 墓地登记。文档必须反映现状——过期段落当场更新
+或删除,禁止「新版方案」「临时做法」这类必然腐烂的措辞。
 
-附加自检:`SCRATCH_DIR` 中已完成使命的脚本删除;确需跨任务保留的,向用户说明原因。
+**收尾时:** 调用 `tidykeep` skill 走一遍收尾流程,至少完成三件事:
 
-**对外动作边界:** agent 的工作到 **commit 为止**。`git push`、npm publish、打 tag、对外交付等
-一切离开本机的动作**由人决定**,未经用户明确指示不得执行。任何"发布 / 交付 / 宣布完成"类
-动作之前,必须先执行一次**体检审计**工作流(见深度工作流)并处理其发现——包括 README 等
-面向用户文档的漂移核对。
+1. **同步 `STATE.md`**:设计/架构/接口有变则更新「当前架构与设计」;被取代的决策标
+   `superseded → 新决策`;删除的文件登记进墓地。无变化就不动,不制造空洞决策。
+2. **核对文档漂移**:README 与 docs 里可验证的断言(命令、路径、接口名、流程)是否仍成立。
+3. **详细提交**:按下方 Commit 规范。
+
+附加自检:草稿区中已完成使命的脚本删除;确需跨任务保留的,向用户说明原因。
 
 ## Commit 规范
 
 ```
 <type>: <一句话说清做了什么>
 
-为什么: <动机 / 修复的问题 / 对应的 TODO>
-影响: <涉及的模块与文件;台账/状态文件相应更新点>
+为什么: <动机 / 修复的问题 / 对应的待办>
+影响: <涉及的模块与文件;STATE.md 相应更新点>
 ```
 
-- `type` ∈ feat / fix / refactor / docs / chore / test / perf;主题与正文有最小长度校验;Merge / Revert / fixup 自动豁免。
-- 确属琐碎改动可 `TIDYKEEP_SKIP=1 git commit ...` 跳过校验,但必须向用户说明原因,不得默默绕过。
+`type` ∈ feat / fix / refactor / docs / chore / test / perf。Merge / Revert / fixup 除外。
+确属琐碎改动可省略详细正文,但必须向用户说明原因,不得默默省略。
 
-## hooks 与误报
+## 对外动作边界
 
-- Claude Code / Codex / Kimi 均装有 PreToolUse(拦副本命名、拦系统 tmp、引导到 `SCRATCH_DIR`)与 Stop hooks;Stop 负责确定触发和汇总 Git 事实,Skill 负责判断 STATE/文档/清理候选,不得自动删除候选;git `pre-commit` / `commit-msg` 只验收可机械证明的提交证据。Git 检查故障默认拒绝,`TIDYKEEP_SKIP=1` 是显式逃生门且不会跳过用户原有 hook。native hooks 仍是 guardrail。
-- 误报处理:把精确相对路径逐行加入 `.tidykeep/allowlist`。配置见 `.tidykeep/config.jsonc`(改后即时生效)。
+agent 的工作到**本地 commit 为止**。`git push`、npm publish、打 tag、对外交付等一切
+离开本机的动作**由人决定**,未经用户当次明确指示不得执行。任何「发布 / 交付 / 宣布完成」
+类动作之前,必须先用 `tidykeep` skill 跑一次完整路径收尾并处理其发现——包括 README 等
+面向用户文档的漂移核对。
 
-## 深度工作流
+## 技能
 
-初始化扫描 / 收尾同步 / 体检审计 的完整流程见 **`.tidykeep/docs/workflows.md`**。
-Claude Code 与 Kimi 有同名技能自动触发;Codex 在被要求执行这类任务时,先完整阅读该文件再照做。
+本协议的完整执行流程在 `tidykeep` skill 里(六事实面完成合同、权限分档、证据层级、
+记忆边界、变更影响矩阵、两阶段汇报)。三家 Agent 均可自动发现:
+`.claude/skills/tidykeep/` 与 `.agents/skills/tidykeep/`。
+
+同时安装的 `sdlc` skill 覆盖从需求澄清到交付的八阶段开发流程;它只管技术文档本身,
+项目级知识收尾仍归 tidykeep。
+
+**本协议靠约定执行,没有自动拦截。** 规则被违反时由人或 review 发现,不要指望工具兜底。

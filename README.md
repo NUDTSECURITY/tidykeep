@@ -1,6 +1,11 @@
 # tidykeep
 
-让项目只保留当前有效的代码、文档和设计。支持 Claude Code、Codex、Kimi Code，要求 Node.js >= 20.11，运行时零第三方依赖。
+让项目只保留当前有效的代码、文档和设计。支持 Claude Code、Codex、Kimi Code，
+要求 Node.js >= 20.11，运行时零第三方依赖。
+
+**tidykeep 是协议分发器，不是执行器。** 它把两个 skill 和一份规则块铺进你的项目，
+之后靠 Agent 遵守约定。它**不安装任何 hook，不拦截任何操作，没有强制力**——
+规则被违反时由人或 code review 发现，不要指望工具兜底。
 
 ## 安装
 
@@ -17,58 +22,75 @@ node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project
 npx tidykeep init /path/to/project
 ```
 
-默认接入三家 Agent 和 git hooks。按需指定：
+先看会发生什么：
 
 ```bash
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project \
-  --agents claude,codex --ledger-mode block --scratch-dir .tmp
+node /absolute/path/to/tidykeep/bin/tidykeep.mjs init /path/to/project --dry-run
 ```
 
-`--agents` 是增量接入，不会移除项目已有的 Agent 集成。
 独立目录可安装；若目录属于 Git 仓库，目标必须是主 worktree 根。
+
+## 装了什么
+
+| 路径 | 内容 |
+|---|---|
+| `.claude/skills/{tidykeep,sdlc}/` | 两个 skill，供 Claude Code 与 Kimi Code 发现 |
+| `.agents/skills/{tidykeep,sdlc}/` | 同上，供 Codex 与 Kimi Code 发现 |
+| `AGENTS.md` | tidykeep 协议块（标记块内） |
+| `CLAUDE.md` | `@AGENTS.md` 指针（标记块内） |
+| `.gitignore` | `.tmp/` 草稿区（标记块内） |
+| `STATE.md` | 知识文件模板，**仅当不存在时创建，永不覆盖** |
+
+只铺 `.claude/skills/` 和 `.agents/skills/` 两处就覆盖三家：Codex 只扫 `.agents/skills`，
+Claude Code 读 `.claude/skills`，Kimi Code 两处都读。
+
+## 两个 skill
+
+**`tidykeep`** —— 知识与规范收尾。六个事实面（代码、运行态、文档、规则、记忆、工作区）
+各自标明状态，不允许把未验证写成完成；权限分四档，检查深度可扩大但操作权限不扩大；
+轻量路径服务个人项目，完整路径服务有发布流程的项目。触发词：`tidykeep`、`洁癖`、
+初始化、收尾、体检审计，或「把文档和记忆整理一下」这类意图。
+
+**`sdlc`** —— 需求澄清 → 价值评估 → 方案设计 → PRD → 开发 → 质量验证 → 修复回归 →
+文档维护，八阶段强制按序推进。它只管技术文档本身，项目级知识收尾仍归 tidykeep。
 
 ## 重复安装
 
 再次运行 `init` 即升级：
 
-- 完整预检后幂等升级；保留配置、知识文件和标记块外内容，`--agents` 只增不减；
-- 受管文件被修改、标记不成对或接入冲突时返回非零，不静默覆盖；
-- 中断后会验证并丢弃旧 staging，再按现场重规划，绝不回放项目内 journal；
-- 项目文件先提交，Kimi/Git 接线随后完成；接线失败时项目层保留，修复后重跑即可；
-- 若崩溃留下锁，确认报错所示进程已退出后，手工删除该精确锁目录再重跑。
+- 我们发布的 skill 文件直接覆盖；`STATE.md` 与标记块外的一切内容原样保留；
+- 标记块孤立或逆序（用户误删、merge 冲突）时**整体拒绝**并返回非零，绝不吞掉夹在
+  标记之间的内容——请先手工修好标记再重跑；
+- 内容未变时不写盘，重跑输出「无变化」。
 
-## 常用命令
+## 卸载
 
 ```bash
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs status /path/to/project
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs doctor /path/to/project
-node /absolute/path/to/tidykeep/bin/tidykeep.mjs doctor /path/to/project --fix
 node /absolute/path/to/tidykeep/bin/tidykeep.mjs uninstall /path/to/project
 ```
 
-`uninstall` 保留 `STATE.md`、`LEDGER.md`、项目配置、allowlist、草稿和既有备份。`--purge` 仅删除内容仍精确等于当前内置模板的 `STATE.md`、`LEDGER.md`；其余保留并返回非零。
-
-团队成员克隆已接入的项目后运行：
-
-```bash
-node .tidykeep/runtime/enable-githooks.mjs
-```
+只删能证明是自己发布的东西：skill 文件内容需精确等于当前版本，标记块需严格配对。
+任何一项无法证明所有权就保守保留并返回非零。`STATE.md` **始终保留**——它是你的知识，
+不是我们的安装物。
 
 ## 工作方式
 
-- `AGENTS.md`：统一规则入口；
-- `STATE.md`：当前设计、决策和废弃记录；
-- `LEDGER.md`：每个受管文件的 TODO、DONE 和核对日期；
-- native hooks：写入前执行确定性拦截；Stop 时汇总受管变更并自动触发 tidykeep Skill 做语义收尾；
-- Skill：查看实际 diff，判断 STATE、文档和清理候选；候选文件不会被 Hook 自动删除；
-- git hooks：提交前只验收文件名、逐文件台账和提交信息等可机械证明的结果；
-- `.tmp/`：项目内一次性脚本目录，用完清理。
-
-配置位于 `.tidykeep/config.jsonc`。误报时把精确相对路径加入 `.tidykeep/allowlist`。
-
-这些 hooks 是流程 guardrail，不是安全沙箱。`TIDYKEEP_SKIP=1` 可显式跳过 tidykeep 提交检查，但不会跳过原有 hook。外部 `core.hooksPath` 须链入两类 hook；卸载前先移除外部接线并 unset。Kimi 全局路由需每位用户各自运行一次 `init`。
+- `AGENTS.md`：统一规则入口，Claude Code 通过 `CLAUDE.md` 的 `@AGENTS.md` 导入；
+- `STATE.md`：当前设计的唯一真相 + 决策记录 + 已废弃墓地；
+- `.tmp/`：项目内一次性脚本目录，用完即删，禁止写系统 `/tmp`；
+- 变更简史不单独立账——它在 `git log` 里，那里更准也不会腐烂。
 
 Agent 的工作边界到本地 commit；push、tag 和 publish 由人决定。
+
+## 从 0.1.0 之前的版本升级
+
+**存在断层。** 旧版本会在项目里安装 `.tidykeep/`（vendored runtime、githooks、
+config.jsonc、allowlist）、三家 native hooks 配置、`~/.kimi-code/config.toml`
+全局块，以及 `LEDGER.md`。新版本**不认识这些资产**，直接装新版会留下孤儿文件。
+
+正确顺序：先用**旧版本**的 `uninstall` 卸干净（必要时加 `--purge`），确认
+`.tidykeep/` 已消失、`git config core.hooksPath` 已 unset、Kimi 全局块已移除，
+再安装新版本。`LEDGER.md` 不会被自动迁移——其中仍有效的待办请手工并入 `STATE.md`。
 
 ## License
 

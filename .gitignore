@@ -4,8 +4,4 @@ node_modules/
 
 # >>> tidykeep >>>
 .tmp/
-.tidykeep/backup/
-.tidykeep/.state/
-.tidykeep/.install-transaction/
-.tidykeep/.install-lock/
 # <<< tidykeep <<<

@@ -1,7 +1,7 @@
 {
   "name": "tidykeep",
   "version": "0.1.0",
-  "description": "跨 Agent(Claude Code / Codex / Kimi Code)的项目知识保鲜工具:AGENTS.md 唯一规则入口、STATE/LEDGER 台账、native hooks 拦截历史副本命名与系统 /tmp 落盘、git hooks 兜底强制详细提交。",
+  "description": "跨 Agent(Claude Code / Codex / Kimi Code)的项目知识保鲜协议分发器:铺设 tidykeep 与 sdlc 两个 Agent Skill、AGENTS.md 唯一规则入口与 STATE.md 设计真相。靠约定执行,不安装任何 hook。",
   "type": "module",
   "bin": {
     "tidykeep": "bin/tidykeep.mjs"
@@ -26,11 +26,11 @@
   },
   "keywords": [
     "agents-md",
+    "agent-skills",
     "claude-code",
     "codex",
     "kimi",
-    "hooks",
-    "git-hooks",
+    "skill",
     "knowledge-management",
     "code-hygiene"
   ],

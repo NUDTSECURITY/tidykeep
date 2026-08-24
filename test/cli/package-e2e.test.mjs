@@ -51,14 +51,16 @@ test('npm 包烟测:pack → 离线安装 → CLI/version 与 payload 完整', {
   assert.equal(ambiguousVersion.status, 1);
   assert.match(ambiguousVersion.stderr, /不能与命令同时使用/);
   for (const rel of [
-    'payload/runtime/core.mjs',
-    'payload/runtime/config.mjs',
-    'payload/runtime/paths.mjs',
-    'payload/runtime/write-policy.mjs',
-    'payload/runtime/ledger.mjs',
-    'payload/runtime/git-policy.mjs',
-    'payload/docs/workflows.md',
     'payload/rules.md',
+    'payload/STATE.md',
+    'payload/skills/tidykeep/SKILL.md',
+    'payload/skills/tidykeep/references/agent-paths.md',
+    'payload/skills/tidykeep/references/governance.md',
+    'payload/skills/tidykeep/references/sync-matrix.md',
+    'payload/skills/tidykeep/references/verification.md',
+    'payload/skills/sdlc/SKILL.md',
+    'payload/skills/sdlc/references/phase1-requirements.md',
+    'payload/skills/sdlc/templates/poc-test-case.md',
   ]) {
     assert.ok(existsSync(join(packageRoot, rel)), `发布包缺少 ${rel}`);
   }

@@ -1,24 +1,21 @@
 #!/usr/bin/env node
-// tidykeep CLI 入口:npx tidykeep <init|uninstall|status|doctor|enable-githooks> [dir] [选项]
+// tidykeep CLI 入口:npx tidykeep <init|uninstall> [dir] [选项]
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 
-const HELP = `tidykeep — 跨 Agent 的项目知识保鲜工具(Claude Code / Codex / Kimi)
+const HELP = `tidykeep — 跨 Agent 的项目知识保鲜协议(Claude Code / Codex / Kimi Code)
 
 用法:
-  npx tidykeep init [dir]              安装/升级(幂等,重跑即升级)
-      --agents claude,codex,kimi       本次接入指定 agent(已有接入保留;默认三家)
-      --ledger-mode block|warn|off     台账强制等级(写入 config.jsonc)
-      --scratch-dir .tmp               草稿区目录名
-      --no-git-hooks                   不接管 git hooks
-      --dry-run                        只打印动作
-  npx tidykeep uninstall [dir]         卸载(标记块精确回滚)
-      --purge                          连 STATE.md / LEDGER.md 一并移除
-  npx tidykeep status [dir] [--json]   安装状态速览
-  npx tidykeep doctor [dir] [--fix]    深度体检(执行位/EOL/条目/探针;--fix 修安全项)
-  npx tidykeep enable-githooks [dir]   启用 git hooks(团队成员克隆后一次)
+  npx tidykeep init [dir]        安装/升级(幂等,重跑即升级)
+      --dry-run                  只打印将要发生的改动
+  npx tidykeep uninstall [dir]   卸载(标记块精确剥离;STATE.md 始终保留)
+
+安装内容:
+  .claude/skills/{tidykeep,sdlc}/  与  .agents/skills/{tidykeep,sdlc}/
+  AGENTS.md / CLAUDE.md / .gitignore 的 tidykeep 标记块
+  STATE.md(仅当不存在时创建)
+
+本协议靠约定执行,不安装任何 hook,也不拦截任何操作。
 `;
 
 let values;
@@ -27,13 +24,6 @@ try {
   ({ values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
-      agents: { type: 'string' },
-      'ledger-mode': { type: 'string' },
-      'scratch-dir': { type: 'string' },
-      'no-git-hooks': { type: 'boolean', default: false },
-      purge: { type: 'boolean', default: false },
-      json: { type: 'boolean', default: false },
-      fix: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
@@ -63,14 +53,12 @@ if (extraPositionals.length) {
   process.exit(1);
 }
 
-const common = { dryRun: values['dry-run'] };
-const supplied = new Set(process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => arg.split('=')[0]));
+const supplied = new Set(
+  process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => arg.split('=')[0]),
+);
 const allowedOptions = {
-  init: new Set(['--agents', '--ledger-mode', '--scratch-dir', '--no-git-hooks', '--dry-run']),
-  uninstall: new Set(['--purge', '--dry-run']),
-  status: new Set(['--json']),
-  doctor: new Set(['--fix']),
-  'enable-githooks': new Set(),
+  init: new Set(['--dry-run']),
+  uninstall: new Set([]),
 };
 if (cmd in allowedOptions) {
   const invalid = [...supplied].filter((option) => !allowedOptions[cmd].has(option));
@@ -79,38 +67,17 @@ if (cmd in allowedOptions) {
     process.exit(1);
   }
 }
+
 let code = 0;
 switch (cmd) {
   case 'init': {
     const { init } = await import('../src/commands/init.mjs');
-    code = init(dirArg, {
-      ...common,
-      agents: values.agents !== undefined ? values.agents.split(',').map((s) => s.trim()) : undefined,
-      ledgerMode: values['ledger-mode'],
-      scratchDir: values['scratch-dir'],
-      noGitHooks: values['no-git-hooks'],
-    });
+    code = init(dirArg, { dryRun: values['dry-run'] });
     break;
   }
   case 'uninstall': {
     const { uninstall } = await import('../src/commands/uninstall.mjs');
-    code = uninstall(dirArg, { ...common, purge: values.purge });
-    break;
-  }
-  case 'status': {
-    const { status } = await import('../src/commands/status.mjs');
-    code = status(dirArg, { json: values.json });
-    break;
-  }
-  case 'doctor': {
-    const { doctor } = await import('../src/commands/doctor.mjs');
-    code = doctor(dirArg, { fix: values.fix });
-    break;
-  }
-  case 'enable-githooks': {
-    const target = resolve(dirArg || process.cwd());
-    const r = spawnSync(process.execPath, [join(target, '.tidykeep', 'runtime', 'enable-githooks.mjs')], { stdio: 'inherit' });
-    code = r.status ?? 1;
+    code = uninstall(dirArg, {});
     break;
   }
   default:
