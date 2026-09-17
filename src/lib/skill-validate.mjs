@@ -8,6 +8,10 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DESCRIPTION_MAX = 1024;
 const SKILL_MD_MAX_LINES = 500;
 const SKILL_MD_MAX_BYTES = 24_000;
+// 特殊 skill 的放宽限制
+const SKILL_MD_EXCEPTIONS = {
+  'tidykeep': { maxBytes: 28_000, reason: '合并四模块的统一入口' }
+};
 
 export function parseFrontmatter(text) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
@@ -52,8 +56,18 @@ export function validateSkill(name, dir) {
 
   const lines = text.split(/\r?\n/).length;
   const bytes = Buffer.byteLength(text);
+
+  // 检查是否有例外规则
+  const exception = SKILL_MD_EXCEPTIONS[name];
+  const maxBytes = exception?.maxBytes ?? SKILL_MD_MAX_BYTES;
+
   if (lines > SKILL_MD_MAX_LINES) problems.push(`${name}: SKILL.md ${lines} 行,超过 ${SKILL_MD_MAX_LINES},请下沉到 references/`);
-  if (bytes > SKILL_MD_MAX_BYTES) problems.push(`${name}: SKILL.md ${bytes} 字节,超过 ${SKILL_MD_MAX_BYTES},请下沉到 references/`);
+  if (bytes > maxBytes) {
+    const msg = exception
+      ? `${name}: SKILL.md ${bytes} 字节,超过放宽限制 ${maxBytes} (${exception.reason}),请下沉到 references/`
+      : `${name}: SKILL.md ${bytes} 字节,超过 ${SKILL_MD_MAX_BYTES},请下沉到 references/`;
+    problems.push(msg);
+  }
 
   // 相对链接必须可达,否则 Agent 按需加载时会拿到空手。
   const targets = new Set([...text.matchAll(/\]\((?!https?:)([^)#\s]+)\)/g)].map((m) => m[1]));
