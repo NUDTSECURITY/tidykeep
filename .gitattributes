@@ -1,4 +1,0 @@
-bin/*.mjs text eol=lf
-src/**/*.mjs text eol=lf
-payload/skills/**/*.md text eol=lf
-payload/*.md text eol=lf
