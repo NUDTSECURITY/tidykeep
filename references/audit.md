@@ -9,6 +9,7 @@ Quick code health check. Score each 0-2 (0=bad, 1=ok, 2=good).
 - [ ] **Errors handled** (not silent failures or bare exceptions)
 - [ ] **Has tests** (critical paths covered)
 - [ ] **Names make sense** (fn/var names explain purpose)
+- [ ] **No speculative defenses** (no guards against impossible cases, no single-use abstractions)
 
 ## Architecture
 

@@ -25,10 +25,12 @@ cp -r tidykeep ~/.agents/skills/
 
 ## Usage
 
-Triggers automatically when:
-- You finish coding and say "wrap up" / "done"
-- You need to write tests
-- You ask "how's the code quality?"
+Can be selected automatically during development when:
+- You finish coding, prepare to commit, or say "wrap up" / "done"
+- You need to write or update tests
+- You ask "how's the code quality?" or prepare a major refactor
+
+No explicit mention of tidykeep is required.
 
 Or invoke explicitly: "use tidykeep cleanup" / "tidykeep testing" / "tidykeep audit"
 
